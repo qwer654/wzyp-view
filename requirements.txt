@@ -1,8 +1,8 @@
-fastapi>=0.110
-uvicorn[standard]>=0.29
-pymysql>=1.1
-DBUtils>=3.0
-langgraph>=1.0
-langchain>=1.0
-langchain-openai>=1.6
-requests>=2.31
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+pymysql==1.2.0
+DBUtils==3.2.0
+langgraph==1.2.11
+langchain==1.4.0
+langchain-openai==1.6.2
+requests==2.34.2

@@ -1,5 +1,5 @@
 # wzyp-view — 链动小铺店铺数据洞察
-FROM python:3.12-slim
+FROM python:3.13-slim
 
 WORKDIR /app
 
@@ -9,10 +9,9 @@ ENV TZ=Asia/Shanghai \
     PIP_NO_CACHE_DIR=1 \
     WZYP_HOST=0.0.0.0
 
-# 依赖（分层缓存；国内网络用清华 pypi 镜像，可被 build-arg 覆盖）
+# 依赖（分层缓存）
 COPY requirements.txt .
-ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
-RUN pip install --no-cache-dir -i ${PIP_INDEX_URL} -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # 应用代码
 COPY server.py agent.py db.py config.py run.py ./

@@ -56,7 +56,7 @@ mysql -u root -p wzyp < wzyp_goods_detail.sql
 cd wzyp-view
 
 # 创建虚拟环境（默认 .venv，Python ≥ 3.11）
-uv venv
+uv venv --python 3.13
 
 # 安装依赖（国内可加 --index-url https://pypi.tuna.tsinghua.edu.cn/simple）
 uv pip install -r requirements.txt
@@ -77,8 +77,6 @@ source .venv/bin/activate
 python run.py
 ```
 
-或 Windows 双击 `启动.bat` 一步到位（内部即上述命令）。
-
 > 不激活环境也可以直接跑：`.venv\Scripts\python.exe run.py`（Windows）或 `.venv/bin/python run.py`（Linux/macOS）
 
 #### 4. 配置并使用
@@ -93,7 +91,7 @@ python run.py
 ### 方式二：Docker
 
 ```bash
-git clone https://github.com/<you>/wzyp-view.git
+git clone https://github.com/Samge0/wzyp-view.git
 cd wzyp-view
 docker compose up -d --build
 # 访问 http://localhost:8770
