@@ -1,0 +1,8 @@
+data/*
+!data/settings.example.json
+server.log
+__pycache__/
+*.pyc
+.venv/
+settings.json
+dist/

@@ -1,0 +1,30 @@
+services:
+  wzyp-view:
+    build: .
+    image: wzyp-view:latest
+    container_name: wzyp-view
+    restart: unless-stopped
+    ports:
+      - "8770:8770"
+    environment:
+      TZ: Asia/Shanghai
+      # ---- 配置方式一：环境变量（优先级高于 settings.json）----
+      # WZYP_DB_HOST: 127.0.0.1
+      # WZYP_DB_PORT: "33333"
+      # WZYP_DB_USER: root
+      # WZYP_DB_PASSWORD: "change-me"
+      # WZYP_DB_DATABASE: wzyp
+      # WZYP_LLM_BASEURL: http://host.docker.internal:16869/v1
+      # WZYP_LLM_MODEL: qwen38
+      # WZYP_LLM_APIKEY: ""
+      # ---- 配置方式二：全部走页面设置（默认，落盘到下面的 volume）----
+    volumes:
+      - ./data:/app/data          # 聊天记忆 + settings.json（页面配置持久化）
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # Linux 下访问宿主机 LLM 服务
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8770/api/stats',timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

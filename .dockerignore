@@ -1,0 +1,25 @@
+# 版本库与缓存
+.git/
+.gitignore
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# 运行时数据（由 volume 挂载，不打进镜像）
+data/
+settings.json
+server.log
+*.log
+
+# 采集脚本（属于外部 workspace，不属于本项目）
+*.bat
+crawl*/
+out/
+
+# 文档与开发文件
+README.md
+.dockerignore
+Dockerfile
+docker-compose.yml
