@@ -1,49 +1,35 @@
-# wzyp-view Android 客户端
+# wzyp-view Android v2.0.0 · 离线单机版
 
-这是原项目 FastAPI + MySQL + LangGraph 系统的 **Android WebView 客户端**，不是 Python/MySQL/LLM 的离线移植。Android 8.0+ 可安装。
+Android 8.0+，无需网络权限，不用部署 FastAPI / MySQL / Python / LLM。
 
-## 能做什么
+## 已实现
 
-- 首页数据总览、店铺与商品查询、详情、AI 聊天及 Web 设置页沿用原项目能力。
-- 适配 360px 等窄屏：水平滑动表格、紧凑导航、手机聊天对话列表。
-- 首次打开填写服务器根地址，保存在应用私有偏好设置。右上角“服务器”随时切换。
-- JavaScript/DOM Storage、文件选择、普通 HTTP(S) 下载、网页外链跳转到系统浏览器。
-- 公网仅接受 HTTPS 服务地址；HTTP 限局域网私有地址。拒绝跨站混合内容与不安全证书例外。
+- 原网页全部数据浏览页面：总览、分布图、热词、店铺/商品查询、筛选、排序、分页、商品详情。
+- 安装包内预置 SQLite 数据（由上游 Samge0/wzyp-view **v1.0.0 静态历史快照**的 \`wzyp-data.zip\` 在 CI 编译时转换）；
+- 本地统计问答及店铺/商品查询结果分析，无外部服务器，记录保存在手机私有存储。
+- 会话列表、新对话、切换、清空/删除聊天、导入/导出本地聊天备份（使用系统分享界面）。
+- 手机竖屏适配，Android 系统文件选择。
 
-## 部署服务端
+## 核心限制（务必了解）
 
-仓库根目录运行以下命令（先按主 README 准备 MySQL 数据库和依赖）：
+1. **AI 分析为内置规则分析引擎，并非原 LangGraph/LLM 模型。** 可以准确执行支持的统计分析意图，开放式复杂生成/追问能力较弱。UI 不得宣称与原云端大模型完全等价。
+2. 商品详情描述保存离线文本；外链和网络图片在飞行模式下不可用。
+3. 数据固定为上游发行时的历史快照；不包含平台之后更新。
+4. 无互联网权限，不能在线同步、自动更新数据库或调用云端模型。
+5. 测试包使用 CI 默认调试签名；不同构建签名可能变化，可能要先卸载旧版。
 
-```bash
-# Linux/macOS；服务端需处于可信局域网或 VPN 中
-WZYP_HOST=0.0.0.0 WZYP_PORT=8770 python run.py
-```
+## CI 编译、校验、发布
 
-手机和电脑连接同一 Wi-Fi，查看电脑的局域网 IP（例如 `192.168.1.5`），在 APK 的“服务器”页面输入 `http://192.168.1.5:8770`。
+修改 \`android-app/**\`、\`tools/**\` 或 workflow 后需触发 GitHub Actions（也支持手动执行）：
 
-**注意：** 手机的 `127.0.0.1` 指手机本身，不是电脑；防火墙需允许指定端口从手机访问。
+[Android APK workflow](../../actions/workflows/android-apk.yml)
 
-互联网部署必须使用 HTTPS 反向代理 + 认证/访问控制（建议 VPN 或 Cloudflare Access 等）。**原 FastAPI 项目尚未给设置/查询/聊天等接口加认证，不得裸露到公网。** 不要把 MySQL 密码和 LLM 密钥写入 APK。原网页设置页的配置存在后端而非手机。
+构建从 \`https://github.com/Samge0/wzyp-view/releases/download/v1.0.0/wzyp-data.zip\` 下载数据（**仅发生在 CI 编译机**），转换成 \`seed.db\`、将离线页面复制到 Android assets，运行 Gradle 和 apksigner 验证后发布 Release。手机运行阶段不发生任何网络访问。
 
-## 构建 APK
+本地编译前运行：
 
-Github Actions: **Actions → Android APK → Run workflow**，或修改 `android-app/**` 后 push 到 `main` 自动构建。
-
-构建成功后：
-- Actions 构建记录的 `wzyp-view-android-debug` artifact 可下载。
-- 同时由构建流程发布到本仓库 **Releases**，文件名 `wzyp-view-android-v1.0.0-debug.apk`。
-
-手动本地编译（Android SDK 35 / JDK 17 / Gradle 8.11.1）：
-
-```bash
+\`\`\`bash
+python3 tools/build_offline_db.py
+python3 tools/build_offline_web.py
 gradle -p android-app --no-daemon assembleDebug
-# android-app/app/build/outputs/apk/debug/app-debug.apk
-```
-
-当前工作流生成开发测试签名的 **debug APK**。每次 GitHub Runner 的签名密钥可能不同，升级安装遇到“签名不一致”时需卸载旧版。正式上线必须配置稳定且私密的 release 签名密钥（不能将密钥提交到公开仓库）。
-
-## 已知限制
-
-- 需要能访问运行中的原项目服务端；后端和数据不打包进 APK。
-- JS Blob 生成的配置导出文件无法用 Android DownloadManager 下载；可从系统浏览器访问后端导出。
-- 会话内容及服务端配置由原 Web/后端处理，切换服务器后数据不会自动迁移。
+\`\`\`
