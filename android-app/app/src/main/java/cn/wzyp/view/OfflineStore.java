@@ -201,9 +201,21 @@ public final class OfflineStore {
             try {
                 writable=SQLiteDatabase.openDatabase(dbPath.toString(),null,SQLiteDatabase.OPEN_READWRITE);
                 writable.beginTransaction();
+                boolean newShop=false;
                 try(Cursor shop=writable.rawQuery(
                     "SELECT token FROM wzyp_shops WHERE token=?",new String[]{token})) {
-                    if(!shop.moveToFirst())throw new Exception("店铺不在内置数据库，请先导入含该店铺的完整数据库");
+                    newShop=!shop.moveToFirst();
+                }
+                if(newShop) {
+                    if(goods.length()==0)throw new Exception("新店铺没有公开商品，无法确定店铺是否有效");
+                    JSONObject first=goods.optJSONObject(0);
+                    String nickname=first==null?"":first.optString("shop_name",token).trim();
+                    if(nickname.isEmpty()||nickname.length()>120)nickname=token;
+                    writable.execSQL("INSERT INTO wzyp_shops (token,nickname,goods_count,"+
+                        "fetch_done,link,create_time) VALUES (?,?,?,?,?,?)",
+                        new Object[]{token,nickname,0,0,"https://wzyp.cn/shop/"+token,
+                            new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss",Locale.ROOT)
+                                .format(new java.util.Date())});
                 }
                 long nextId=1;
                 try(Cursor id=writable.rawQuery(
@@ -268,7 +280,8 @@ public final class OfflineStore {
                 writable.setTransactionSuccessful();
                 committed=true;
                 JSONObject result=new JSONObject();
-                put(result,"shop_token",token);put(result,"added",added);
+                put(result,"shop_token",token);put(result,"new_shop",newShop);
+                put(result,"added",added);
                 put(result,"modified",modified);put(result,"unchanged",unchanged);
                 put(result,"seen",goods.length());
                 return result;
