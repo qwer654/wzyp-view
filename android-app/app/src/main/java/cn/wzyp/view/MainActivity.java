@@ -35,6 +35,7 @@ public final class MainActivity extends Activity {
             OfflineStore store=new OfflineStore(this);
             aiBridge=new AiBridge(this,store);
             dataManager=new DataUpdateManager(this,store);
+            DeltaSyncEngine.schedule(this);
             web=new WebView(this);
             setContentView(web);
             WebSettings ws=web.getSettings();
