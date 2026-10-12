@@ -163,6 +163,36 @@ html=html.replace("  if(!message || sending)return;","  if(!message || sending)r
 html=html.replace("bubble.textContent='本地分析失败：'+e.message","bubble.textContent='AI 请求失败：'+e.message")
 html=html.replace("const bubble=appendMsg('ai','正在查询本地数据库…');",
                   "const bubble=appendMsg('ai','正在生成分析…');")
+
+# The original "AI 解读" context included QQ contacts. Never implicitly send that field.
+html=html.replace("均价:r.avg_price,QQ:r.contact_qq", "均价:r.avg_price")
+# Markdown from user-selected APIs is untrusted. Restrict HTML elements and URL schemes
+# before inserting generated content into the application DOM.
+html=html.replace(
+    "return html; // marked 默认对 html 标签转义输出",
+    """const sandbox=document.createElement('template');
+    sandbox.innerHTML=html;
+    const allowed=new Set(['P','BR','STRONG','B','EM','I','S','DEL','H1','H2','H3',
+      'H4','H5','H6','PRE','CODE','BLOCKQUOTE','UL','OL','LI','TABLE',
+      'THEAD','TBODY','TR','TH','TD','HR','A']);
+    sandbox.content.querySelectorAll('*').forEach(node=>{
+      if(!allowed.has(node.tagName)){
+        node.replaceWith(document.createTextNode(node.textContent||''));
+        return;
+      }
+      for(const attr of Array.from(node.attributes)){
+        if(node.tagName==='A' && attr.name==='href')continue;
+        node.removeAttribute(attr.name);
+      }
+      if(node.tagName==='A'){
+        const link=node.getAttribute('href')||'';
+        if(!/^https?:\\/\\//i.test(link))node.removeAttribute('href');
+        else {node.setAttribute('target','_blank');node.setAttribute('rel','noopener noreferrer');}
+      }
+    });
+    return sandbox.innerHTML;"""
+)
+
 p.write_text(html,encoding="utf-8")
 for idx,js in enumerate(re.findall(r'<script[^>]*>(.*?)</script>',html,re.S|re.I)):
     if not js.strip():continue
