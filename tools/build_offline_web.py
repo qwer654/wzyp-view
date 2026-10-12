@@ -59,7 +59,8 @@ replace_block('  <section class="page" id="page-settings">', '  </section>', """
   </section>
 """)
 # Remove first duplicate closing section produced by replace_block.
-html = html.replace("  </section>\n  </section>\n</main>", "  </section>\n</main>")
+import re
+html = re.sub(r'(</section>)\\s*</section>(?=\\s*</main>)', r'\\1', html, count=1)
 
 replace_block("async function sendChat(){", "function buildFollowupsEl(fs){", """
 async function sendChat(){
