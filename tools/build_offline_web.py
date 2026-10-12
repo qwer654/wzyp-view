@@ -60,7 +60,7 @@ replace_block('  <section class="page" id="page-settings">', '  </section>', """
 """)
 # Remove first duplicate closing section produced by replace_block.
 import re
-html = re.sub(r'(</section>)\\s*</section>(?=\\s*</main>)', r'\\1', html, count=1)
+html = re.sub(r'(</section>)\s*</section>(?=\s*</main>)', r'\1', html, count=1)
 
 replace_block("async function sendChat(){", "function buildFollowupsEl(fs){", """
 async function sendChat(){
@@ -164,5 +164,7 @@ for name in ("marked.min.js", "favicon.svg"):
 assert 'WzypOffline.request' in html
 assert 'src="marked.min.js"' in html
 assert 'id="page-settings"' in html
-assert html.count('</section>') == (root / "static" / "index.html").read_text(encoding="utf-8").count('</section>')
+original_sections=(root / "static" / "index.html").read_text(encoding="utf-8").count('</section>')
+generated_sections=html.count('</section>')
+assert generated_sections == original_sections, f"unbalanced sections: generated={generated_sections}, original={original_sections}"
 print("Offline HTML packaged", len(html), "bytes")
