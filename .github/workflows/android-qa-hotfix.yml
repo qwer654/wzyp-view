@@ -1,0 +1,89 @@
+name: Android QA Hotfix APK (side-by-side)
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/android-qa-hotfix.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-qa-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  debug-qa:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android platform and build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -path '*/bin/sdkmanager' | sort -V | tail -n1)"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --install 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Test incremental feed generator
+        run: python3 -m unittest discover -s tests -p 'test_delta_feed.py' -v
+      - name: Build bundled offline SQLite data
+        run: python3 tools/build_offline_db.py
+      - name: Bundle offline interface
+        run: python3 tools/build_offline_web.py
+      - name: Enable configurable AI API interface
+        run: python3 tools/enable_api_ui.py
+      - name: Enable full database update panel
+        run: python3 tools/enable_db_update_ui.py
+      - name: Enable incremental background sync UI
+        run: python3 tools/enable_delta_sync_ui.py
+      - name: Enable public storefront refresh UI
+        run: python3 tools/enable_public_shop_ui.py
+      - name: Build isolated debug APK
+        run: gradle -p android-app --no-daemon --stacktrace assembleDebug
+      - name: Verify APK manifest, services and signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=android-app/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "package: name='cn.wzyp.view.qa'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions "$APK" | grep -F 'android.permission.INTERNET'
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions "$APK" | grep -F 'android.permission.ACCESS_NETWORK_STATE'
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump xmltree "$APK" AndroidManifest.xml | grep -F '.PublicRefreshJob'
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump xmltree "$APK" AndroidManifest.xml | grep -F '.DeltaSyncJob'
+          unzip -l "$APK" | grep -F 'assets/seed.db'
+          unzip -l "$APK" | grep -F 'assets/index.html'
+          mkdir -p dist
+          cp "$APK" dist/wzyp-view-v8.0.1-permission-fix-QA-SIDEBYSIDE.apk
+          sha256sum dist/*.apk > dist/SHA256SUMS.txt
+      - name: Upload isolated QA APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: wzyp-view-v8.0.1-qa
+          path: dist/
+          retention-days: 30
+          if-no-files-found: error
+      - name: Publish PRE-RELEASE for user testing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: android-qa-build-${{ github.run_number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" dist/wzyp-view-v8.0.1-permission-fix-QA-SIDEBYSIDE.apk dist/SHA256SUMS.txt \
+            --prerelease \
+            --title "Android v8.0.1 QA · Network Permission Fix · Build ${{ github.run_number }}" \
+            --notes "ISOLATED TEST BUILD, applicationId=cn.wzyp.view.qa. Can coexist with production; will not update original app or access its local database. Verifies ACCESS_NETWORK_STATE and both JobService declarations. This build uses CI debug signing and is NOT an upgradeable production APK. For production build, configure private release signing secrets as described in android-app/SIGNING.md."
