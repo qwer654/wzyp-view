@@ -163,11 +163,134 @@ public final class OfflineStore {
         put(result,"source",prefs.getString("snapshot_source","APK 内置历史快照"));
         put(result,"updated_ms",prefs.getLong("snapshot_updated_ms",0));
         put(result,"size_bytes",dbPath.length());
+        put(result,"revision",syncRevision());
         JSONObject s=stats().optJSONObject("stats");
         put(result,"shops",s==null?0:s.optLong("shop_count"));
         put(result,"goods",s==null?0:s.optLong("goods_count"));
         put(result,"details",s==null?0:s.optLong("detail_count"));
         return result;
+    }
+
+
+    /** Apply a versioned JSON delta in a single SQLite transaction. Model-generated SQL is never accepted. */
+    public synchronized JSONObject applyDelta(JSONObject feed) throws Exception {
+        if(feed.optInt("schema_version",-1)!=1)throw new Exception("不支持的数据源协议版本");
+        String revision=feed.optString("revision","").trim();
+        if(revision.isEmpty()||revision.length()>128)throw new Exception("同步数据缺少合法 revision");
+        JSONObject changes=feed.optJSONObject("changes");
+        if(changes==null)throw new Exception("同步响应缺少 changes");
+        String[] tables={"wzyp_shops","wzyp_goods","wzyp_goods_detail"};
+        String[] keys={"token","goods_key","goods_key"};
+        for(String key:JSONObject.getNames(changes)==null?new String[0]:JSONObject.getNames(changes))
+            if(!Arrays.asList(tables).contains(key))throw new Exception("同步响应包含未知表："+key);
+        // All local reads and model evidence are locked out while the transaction runs.
+        db.close();
+        SQLiteDatabase writable=null;
+        boolean committed=false;
+        try {
+            writable=SQLiteDatabase.openDatabase(dbPath.toString(),null,SQLiteDatabase.OPEN_READWRITE);
+            writable.beginTransaction();
+            writable.execSQL("CREATE TABLE IF NOT EXISTS _wzyp_sync_meta (k TEXT PRIMARY KEY, v TEXT)");
+            String current="";
+            try(Cursor cur=writable.rawQuery(
+                  "SELECT v FROM _wzyp_sync_meta WHERE k='revision'",null)) {
+                if(cur.moveToFirst())current=cur.getString(0);
+            }
+            if(revision.equals(current)) {
+                JSONObject unchanged=new JSONObject();
+                put(unchanged,"status","unchanged");
+                put(unchanged,"revision",revision);
+                writable.setTransactionSuccessful();
+                committed=true;
+                return unchanged;
+            }
+            String base=feed.optString("base_revision","");
+            if(!base.equals(current))
+                throw new Exception("同步版本不匹配：手机="+(current.isEmpty()?"初始快照":current)+
+                    "，数据源基线="+base+"。请先导入完整数据库或正确的增量链");
+            int total=0,deleted=0,upserted=0;
+            // First delete obsolete detail/goods/shop rows, then upsert parents first.
+            for(int index=2;index>=0;index--) {
+                String table=tables[index],key=keys[index];
+                JSONObject change=changes.optJSONObject(table);
+                if(change==null)continue;
+                JSONArray deletions=change.optJSONArray("delete");
+                if(deletions==null)continue;
+                if(deletions.length()>25000 || (total+=deletions.length())>45000)
+                    throw new Exception("同步包记录超过限制");
+                for(int i=0;i<deletions.length();i++){
+                    String id=deletions.optString(i,"");
+                    if(id.isEmpty()||id.length()>300)throw new Exception("删除记录键不合法");
+                    writable.execSQL("DELETE FROM "+table+" WHERE "+key+"=?",new Object[]{id});
+                    deleted++;
+                }
+            }
+            for(int index=0;index<3;index++){
+                String table=tables[index],key=keys[index];
+                JSONObject change=changes.optJSONObject(table);
+                if(change==null)continue;
+                JSONArray updates=change.optJSONArray("upsert");
+                if(updates==null)continue;
+                if(updates.length()>25000 || (total+=updates.length())>45000)
+                    throw new Exception("同步包记录超过限制");
+                HashSet<String> columns=new HashSet<>();
+                try(Cursor cur=writable.rawQuery("PRAGMA table_info("+table+")",null)) {
+                    while(cur.moveToNext())columns.add(cur.getString(1));
+                }
+                for(int i=0;i<updates.length();i++){
+                    JSONObject row=updates.optJSONObject(i);
+                    if(row==null)throw new Exception("更新记录必须是 JSON 对象");
+                    String id=row.optString(key,"");
+                    if(id.isEmpty()||id.length()>300)throw new Exception(table+" 缺少 "+key);
+                    String[] names=JSONObject.getNames(row);
+                    if(names==null||names.length==0)throw new Exception("空更新记录");
+                    for(String column:names)
+                        if(!columns.contains(column))throw new Exception("数据库没有字段 "+table+"."+column);
+                    // Remove existing key (seed database does not declare primary keys).
+                    writable.execSQL("DELETE FROM "+table+" WHERE "+key+"=?",new Object[]{id});
+                    StringBuilder sql=new StringBuilder("INSERT INTO "+table+" (");
+                    StringBuilder qmarks=new StringBuilder();
+                    Object[] vals=new Object[names.length];
+                    for(int col=0;col<names.length;col++){
+                        if(col>0){sql.append(",");qmarks.append(",");}
+                        sql.append("\"").append(names[col]).append("\"");
+                        qmarks.append("?");
+                        Object val=row.opt(names[col]);
+                        if(val==null||JSONObject.NULL.equals(val))vals[col]=null;
+                        else if(val instanceof Number||val instanceof String)vals[col]=val;
+                        else if(val instanceof Boolean)vals[col]=((Boolean)val)?1:0;
+                        else throw new Exception("数据库字段仅支持文本、数字或 null");
+                    }
+                    sql.append(") VALUES (").append(qmarks).append(")");
+                    writable.execSQL(sql.toString(),vals);
+                    upserted++;
+                }
+            }
+            writable.execSQL("INSERT OR REPLACE INTO _wzyp_sync_meta(k,v) VALUES ('revision',?)",
+                new Object[]{revision});
+            writable.setTransactionSuccessful();
+            committed=true;
+            statsCache=null;
+            JSONObject summary=new JSONObject();
+            put(summary,"status","updated");
+            put(summary,"revision",revision);
+            put(summary,"deleted",deleted);
+            put(summary,"upserted",upserted);
+            return summary;
+        }finally{
+            if(writable!=null){
+                if(writable.inTransaction())writable.endTransaction();
+                writable.close();
+            }
+            db=SQLiteDatabase.openDatabase(dbPath.toString(),null,SQLiteDatabase.OPEN_READONLY);
+            if(committed)statsCache=null;
+        }
+    }
+
+    public synchronized String syncRevision() {
+        try(Cursor c=db.rawQuery("SELECT v FROM _wzyp_sync_meta WHERE k='revision'",null)){
+            return c.moveToFirst()?c.getString(0):"";
+        }catch(Exception e){return "";}
     }
 
     private static JSONObject object(String s) {
