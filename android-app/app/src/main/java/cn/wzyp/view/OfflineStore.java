@@ -31,7 +31,8 @@ import java.util.regex.Pattern;
 /** Bundled SQLite on-device backend. No sockets, remote services or remote LLM involved. */
 public final class OfflineStore {
     private final Context context;
-    private final SQLiteDatabase db;
+    private SQLiteDatabase db;
+    private final File dbPath;
     private final SharedPreferences prefs;
     private JSONObject statsCache;
 
@@ -51,7 +52,7 @@ public final class OfflineStore {
 
     public OfflineStore(Context ctx) throws Exception {
         context = ctx.getApplicationContext();
-        File dbPath = context.getDatabasePath("wzyp_snapshot_v1.db");
+        dbPath = context.getDatabasePath("wzyp_snapshot_v1.db");
         File dir = dbPath.getParentFile();
         if (dir != null && !dir.exists() && !dir.mkdirs()) {
             throw new IllegalStateException("无法建立本地数据目录");
@@ -69,6 +70,100 @@ public final class OfflineStore {
         }
         db = SQLiteDatabase.openDatabase(dbPath.toString(), null, SQLiteDatabase.OPEN_READONLY);
         prefs = context.getSharedPreferences("wzyp_offline_chat", Context.MODE_PRIVATE);
+    }
+
+    /** Inspect and hot-swap a complete SQLite snapshot, preserving local chat and API settings.
+     * All query calls hold this store's monitor. The caller must copy the candidate to
+     * private storage and invoke this method on a worker thread.
+     */
+    public synchronized JSONObject installSnapshot(File candidate, String source) throws Exception {
+        if(candidate==null || !candidate.isFile() || candidate.length()<4096)
+            throw new Exception("数据库文件为空或不是有效的 SQLite");
+        if(candidate.length()>600L*1024L*1024L)
+            throw new Exception("数据库超出 600 MB 限制");
+        JSONObject info=checkSnapshot(candidate);
+        File backup=new File(dbPath.getAbsolutePath()+".backup");
+        if(backup.exists() && !backup.delete())throw new Exception("无法清理旧备份");
+        db.close();
+        boolean oldBackedUp=false;
+        try {
+            if(!dbPath.renameTo(backup))throw new Exception("旧数据库备份失败");
+            oldBackedUp=true;
+            if(!candidate.renameTo(dbPath))throw new Exception("新数据库移动失败");
+            db=SQLiteDatabase.openDatabase(dbPath.toString(),null,SQLiteDatabase.OPEN_READONLY);
+            // New snapshot must be visible immediately in dashboards, chat and model evidence.
+            statsCache=null;
+            prefs.edit().putString("snapshot_source",source)
+                .putLong("snapshot_updated_ms",System.currentTimeMillis())
+                .putInt("snapshot_shop_count",info.optInt("shops"))
+                .putInt("snapshot_goods_count",info.optInt("goods")).apply();
+            if(backup.exists())backup.delete();
+            return info;
+        } catch(Exception failure) {
+            if(oldBackedUp) {
+                if(dbPath.exists())dbPath.delete();
+                if(!backup.renameTo(dbPath))
+                    throw new Exception("更新失败且恢复原数据库失败，请保留 .backup 文件",failure);
+            }
+            db=SQLiteDatabase.openDatabase(dbPath.toString(),null,SQLiteDatabase.OPEN_READONLY);
+            statsCache=null;
+            throw failure;
+        }
+    }
+
+    /** Validation occurs before closing the active database. */
+    private static JSONObject checkSnapshot(File file) throws Exception {
+        SQLiteDatabase incoming=SQLiteDatabase.openDatabase(file.toString(),null,SQLiteDatabase.OPEN_READONLY);
+        try {
+            try(Cursor c=incoming.rawQuery("PRAGMA integrity_check",null)) {
+                if(!c.moveToFirst() || !"ok".equalsIgnoreCase(c.getString(0)))
+                    throw new Exception("SQLite 数据库完整性检查未通过");
+            }
+            String[][] required={
+                {"wzyp_shops","token","nickname","login_province","contact_qq",
+                    "sell_count","deposit_money","goods_count","card_count","article_count",
+                    "resource_count","equity_count","auth_status","shop_newbie",
+                    "create_time","fetch_done"},
+                {"wzyp_goods","id","goods_key","shop_token","goods_type","name",
+                    "price","market_price","status","link"},
+                {"wzyp_goods_detail","goods_key","name","price","real_price",
+                    "market_price","description","image"}
+            };
+            for(String[] table:required) {
+                Set<String> found=new HashSet<>();
+                try(Cursor c=incoming.rawQuery("PRAGMA table_info("+table[0]+")",null)) {
+                    while(c.moveToNext())found.add(c.getString(1));
+                }
+                for(int i=1;i<table.length;i++)
+                    if(!found.contains(table[i]))
+                        throw new Exception("数据库缺少字段 "+table[0]+"."+table[i]);
+            }
+            JSONObject info=new JSONObject();
+            try(Cursor c=incoming.rawQuery(
+                "SELECT (SELECT COUNT(*) FROM wzyp_shops),"+
+                "(SELECT COUNT(*) FROM wzyp_goods),"+
+                "(SELECT COUNT(*) FROM wzyp_goods_detail)",null)) {
+                if(!c.moveToFirst())throw new Exception("无法读取统计数量");
+                put(info,"shops",c.getLong(0));
+                put(info,"goods",c.getLong(1));
+                put(info,"details",c.getLong(2));
+            }
+            if(info.optLong("shops")<1 || info.optLong("goods")<1)
+                throw new Exception("导入的快照没有有效店铺或商品数据");
+            return info;
+        } finally {incoming.close();}
+    }
+
+    public synchronized JSONObject snapshotInfo() {
+        JSONObject result=new JSONObject();
+        put(result,"source",prefs.getString("snapshot_source","APK 内置历史快照"));
+        put(result,"updated_ms",prefs.getLong("snapshot_updated_ms",0));
+        put(result,"size_bytes",dbPath.length());
+        JSONObject s=stats().optJSONObject("stats");
+        put(result,"shops",s==null?0:s.optLong("shop_count"));
+        put(result,"goods",s==null?0:s.optLong("goods_count"));
+        put(result,"details",s==null?0:s.optLong("detail_count"));
+        return result;
     }
 
     private static JSONObject object(String s) {
@@ -454,6 +549,7 @@ public final class OfflineStore {
         try {
             JSONObject body=object(bodyString);
             if(path.equals("/api/stats"))return stats().toString();
+            if(path.equals("/api/data/info"))return snapshotInfo().toString();
             if(path.equals("/api/shops"))return listShops(body).toString();
             if(path.equals("/api/goods"))return listGoods(body).toString();
             if(path.startsWith("/api/goods/"))
