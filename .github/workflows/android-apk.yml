@@ -39,6 +39,9 @@ jobs:
           gradle-version: '8.11.1'
       - name: Test incremental feed generator
         run: python3 -m unittest discover -s tests -p 'test_delta_feed.py' -v
+      - name: Probe one public storefront page (non-blocking; no challenge bypass)
+        continue-on-error: true
+        run: python3 tools/probe_public_shop.py
       - name: Build bundled offline SQLite data
         run: python3 tools/build_offline_db.py
       - name: Bundle offline HTML interface
@@ -51,9 +54,6 @@ jobs:
         run: python3 tools/enable_delta_sync_ui.py
       - name: Add public shop refresh UI
         run: python3 tools/enable_public_shop_ui.py
-      - name: Probe one public storefront page (non-blocking; no challenge bypass)
-        continue-on-error: true
-        run: python3 tools/probe_public_shop.py
       - name: Assemble debug APK
         run: gradle -p android-app --no-daemon --stacktrace assembleDebug
       - name: Verify APK and package
