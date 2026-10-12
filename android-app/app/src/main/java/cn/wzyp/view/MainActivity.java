@@ -35,8 +35,19 @@ public final class MainActivity extends Activity {
             OfflineStore store=new OfflineStore(this);
             aiBridge=new AiBridge(this,store);
             dataManager=new DataUpdateManager(this,store);
-            DeltaSyncEngine.schedule(this);
-            PublicRefreshJob.schedule(this);
+            // These optional network jobs must NEVER prevent opening local offline data.
+            // A rejected JobScheduler task (e.g. missing network permission in an old
+            // installation or vendor policy) is NOT a SQLite initialization failure.
+            try {
+                DeltaSyncEngine.schedule(this);
+            } catch (Exception jobError) {
+                android.util.Log.w("WzypStartup","Delta sync scheduling unavailable",jobError);
+            }
+            try {
+                PublicRefreshJob.schedule(this);
+            } catch (Exception jobError) {
+                android.util.Log.w("WzypStartup","Public shop scheduling unavailable",jobError);
+            }
             web=new WebView(this);
             setContentView(web);
             WebSettings ws=web.getSettings();
