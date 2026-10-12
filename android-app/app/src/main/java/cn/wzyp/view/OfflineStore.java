@@ -176,6 +176,10 @@ public final class OfflineStore {
 
 
 
+    private static double toDouble(String raw){
+        try{return Double.parseDouble(raw);}catch(Exception e){return Double.NaN;}
+    }
+
     /** Existing-storefront token selection: only public shop tokens already in the local DB. */
     public synchronized JSONArray publicShopTokens(int offset,int limit) {
         JSONArray tokens=new JSONArray();
@@ -222,6 +226,18 @@ public final class OfflineStore {
                     "SELECT COALESCE(MAX(CAST(id AS INTEGER)),0)+1 FROM wzyp_goods",null)){
                     if(id.moveToFirst())nextId=id.getLong(0);
                 }
+                // Preload this shop's history once; avoid one Cursor query for each
+                // unchanged item when refreshing hundreds of catalog entries.
+                java.util.HashMap<String,String[]> previous=new java.util.HashMap<>();
+                try(Cursor existing=writable.rawQuery(
+                    "SELECT goods_key,name,price,market_price,status,goods_type "+
+                    "FROM wzyp_goods WHERE shop_token=?",new String[]{token})) {
+                    while(existing.moveToNext()){
+                        String[] row=new String[5];
+                        for(int j=0;j<5;j++)row[j]=existing.isNull(j+1)?"":existing.getString(j+1);
+                        previous.put(existing.getString(0),row);
+                    }
+                }
                 java.util.HashSet<String> seen=new java.util.HashSet<>();
                 for(int i=0;i<goods.length();i++){
                     JSONObject row=goods.optJSONObject(i);
@@ -240,6 +256,26 @@ public final class OfflineStore {
                     Object market=row.opt("market_price");
                     String status=row.optString("status","1");
                     String link="https://wzyp.cn/item/"+key;
+                    String marketText=market==null||market==JSONObject.NULL?"":String.valueOf(market);
+                    String[] old=previous.get(key);
+                    boolean exists=old!=null;
+                    boolean changed=!exists ||
+                        !name.equals(old[0]) ||
+                        Math.abs(price-toDouble(old[1]))>0.00000001 ||
+                        !marketText.equals(old[2]) ||
+                        !status.equals(old[3]) ||
+                        !type.equals(old[4]);
+                    if(exists && !changed){unchanged++;continue;}
+                    if(!exists){
+                        // goods_key is a global item identifier. Never silently overwrite
+                        // another shop's record when an upstream catalog is inconsistent.
+                        try(Cursor duplicate=writable.rawQuery(
+                            "SELECT shop_token FROM wzyp_goods WHERE goods_key=? LIMIT 1",
+                            new String[]{key})){
+                            if(duplicate.moveToFirst())
+                                throw new Exception("商品 Key 已属于其他店铺："+key);
+                        }
+                    }
                     JSONObject raw=new JSONObject();
                     put(raw,"source","public-storefront");
                     put(raw,"fetched_at",System.currentTimeMillis());
@@ -247,20 +283,6 @@ public final class OfflineStore {
                     put(raw,"goods_type",type);
                     put(raw,"name",name);
                     put(raw,"price",price);
-                    String marketText=market==null||market==JSONObject.NULL?"":String.valueOf(market);
-                    boolean exists=false,changed=false;
-                    try(Cursor old=writable.rawQuery(
-                        "SELECT name,price,market_price,status,goods_type FROM wzyp_goods "+
-                        "WHERE goods_key=? LIMIT 1",new String[]{key})){
-                        if(old.moveToFirst()){
-                            exists=true;
-                            changed=!name.equals(old.getString(0)) || price!=old.getDouble(1) ||
-                                !marketText.equals(old.isNull(2)?"":old.getString(2)) ||
-                                !status.equals(old.isNull(3)?"":old.getString(3)) ||
-                                !type.equals(old.isNull(4)?"":old.getString(4));
-                        }
-                    }
-                    if(exists && !changed){unchanged++;continue;}
                     if(exists){
                         writable.execSQL("UPDATE wzyp_goods SET name=?,price=?,market_price=?,status=?,"+
                             "goods_type=?,link=?,raw_json=? WHERE goods_key=?",
