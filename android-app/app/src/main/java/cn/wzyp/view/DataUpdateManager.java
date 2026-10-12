@@ -30,6 +30,7 @@ public final class DataUpdateManager {
     private static final long MAX_BYTES=600L*1024L*1024L;
     private final Activity activity;
     private final OfflineStore store;
+    private final PublicStorefrontUpdater storefront;
     private final ExecutorService io=Executors.newSingleThreadExecutor();
     private final AtomicBoolean working=new AtomicBoolean(false);
     private volatile WebView browser;
@@ -37,6 +38,7 @@ public final class DataUpdateManager {
     public DataUpdateManager(Activity activity, OfflineStore store) {
         this.activity=activity;
         this.store=store;
+        storefront=new PublicStorefrontUpdater(activity,store);
     }
 
     public void attachWebView(WebView w){browser=w;}
@@ -56,6 +58,60 @@ public final class DataUpdateManager {
         if(w!=null)w.post(()->{
             if(browser==w)w.evaluateJavascript(
                 "window.__wzypDbUpdate("+payload.toString()+")",null);
+        });
+    }
+
+    @JavascriptInterface
+    public String publicShopStatus() {
+        return storefront.info().toString();
+    }
+
+    @JavascriptInterface
+    public String publicShopSettings() {
+        android.content.SharedPreferences prefs=activity.getSharedPreferences("wzyp_public_sync_v6",0);
+        JSONObject state=storefront.info();
+        put(state,"auto",prefs.getBoolean("auto",false));
+        return state.toString();
+    }
+
+    @JavascriptInterface
+    public String publicShopSetAuto(boolean enabled) {
+        try {
+            activity.getSharedPreferences("wzyp_public_sync_v6",0)
+                .edit().putBoolean("auto",enabled).apply();
+            PublicRefreshJob.schedule(activity);
+            return publicShopSettings();
+        }catch(Exception e){
+            return put(new JSONObject(),"_error",e.getMessage()).toString();
+        }
+    }
+
+    @JavascriptInterface
+    public void publicShopRefresh(String target,int count) {
+        if(!working.compareAndSet(false,true)){
+            notifyJs("public_error","已有同步或数据库任务在运行",0,null);
+            return;
+        }
+        io.execute(()->{
+            try {
+                PublicStorefrontUpdater.Progress progress=(stage,message,details)->
+                    notifyJs("public_"+stage,message,-1,details);
+                JSONObject result;
+                String token=target==null?"":target.trim();
+                if(token.isEmpty()){
+                    result=storefront.refreshBatch(count,progress);
+                }else{
+                    // No arbitrary URLs/hosts accepted by the native API bridge.
+                    if(token.startsWith("https://wzyp.cn/shop/"))
+                        token=token.substring("https://wzyp.cn/shop/".length()).replaceAll("/$","");
+                    else if(token.startsWith("https://pay.ldxp.cn/shop/"))
+                        token=token.substring("https://pay.ldxp.cn/shop/".length()).replaceAll("/$","");
+                    result=storefront.refreshOne(token,progress);
+                }
+                notifyJs("public_done","公开店铺商品更新完成",100,result);
+            }catch(Exception e){
+                notifyJs("public_error","公开店铺刷新失败："+e.getMessage(),0,null);
+            }finally{working.set(false);}
         });
     }
 
