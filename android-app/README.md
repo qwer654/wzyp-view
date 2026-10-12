@@ -1,6 +1,14 @@
-# wzyp-view Android v8.0.0 · 公开店铺直接刷新 / SQLite 增量同步 / 自选 AI API
+# wzyp-view Android v8.0.1 · 公开店铺直接刷新 / SQLite 增量同步 / 自选 AI API
 
 Android 8.0+。APK 内置 SQLite，统计、图表、店铺/商品筛选、详情等始终本地运行。AI 聊天可以由用户自行接入兼容接口。
+
+
+## v8.0.1 · 自动更新保存失败修复
+
+- 补全 Android Manifest 的 `android.permission.ACCESS_NETWORK_STATE`。后台自动更新使用 `JobScheduler.NETWORK_TYPE_UNMETERED` / `NETWORK_TYPE_ANY`，Android 要求此权限；它是普通权限，不需要用户到“应用权限”页面手动开通。
+- CI 对已编译 APK 强制检查 `INTERNET`、`ACCESS_NETWORK_STATE` 以及两个后台任务 Service。另有不依赖私钥的[编译验证工作流](../.github/workflows/android-permission-smoke.yml)，确保修复能通过 Android 编译。
+- 系统拒绝安排任务时，APP 不再错误显示“保存成功”。
+- 正式 v8.0.1 需要仓库管理员配置固定签名 GitHub Secrets 才会产出，缺少签名密钥时不会发布另一个不能升级的临时 Debug APK。
 
 ## v8 固定签名（解决不能覆盖安装）
 
