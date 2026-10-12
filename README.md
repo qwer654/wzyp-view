@@ -31,15 +31,14 @@
 
 ![设置页](docs/screenshot-settings.png)
 
-## 📱 Android APK · 完全离线数据版 v2
+## 📱 Android v3 · 离线数据 + 自选大模型 API
 
-Android 8.0+，不需要服务器、数据库账号或联网权限。
-
-- **APK 下载：** [Releases](../../releases)
-- **构建与验收：** [Android APK · Actions](../../actions/workflows/android-apk.yml)
-- **代码及说明：** [Android 离线单机版](android-app/README.md)
-- **功能：** 内置 SQLite 历史快照（250 店铺 / 11,042 商品 / 10,769 详情），离线数据图表、筛选、查询、排序、分页、商品详情、离线统计问答及本地会话备份。
-- **区别：** 离线统计聊天采用规则分析引擎，**不等同于原 LangGraph 自由生成 AI**；原站外链、远程图片及数据在线更新需网络，不属于离线能力。
+- [Android APK 下载](../../releases) · [GitHub Actions 构建](../../actions/workflows/android-apk.yml)
+- [详细配置和构建指南](android-app/README.md)
+- 店铺、商品、图表、筛选、详情：使用手机内置 SQLite，可完全离线使用。
+- **AI 分析：** Android 设置页可自行填写 OpenAI Chat Completions 兼容 **Base URL / Model / API Key**；支持测试连接并可切换回本地规则分析。
+- API Key 由 Android Keystore 加密保存；公网要求 HTTPS；使用在线 AI 时只向自选服务商提供相关统计摘要与问题，不上传完整数据库。
+- **注意：** 在线 AI 需要网络；原生 Anthropic/Gemini 等非 OpenAI 兼容协议需网关适配。历史快照不可当作实时商品数据。
 
 ## 快速开始
 
