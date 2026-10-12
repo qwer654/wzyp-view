@@ -29,11 +29,14 @@ public final class PublicRefreshJob extends JobService {
             return;
         }
         if(jobs.getPendingJob(JOB_ID)!=null)return;
-        jobs.schedule(new JobInfo.Builder(JOB_ID,new ComponentName(context,PublicRefreshJob.class))
+        int accepted=jobs.schedule(new JobInfo.Builder(JOB_ID,
+                new ComponentName(context,PublicRefreshJob.class))
             .setPeriodic(PERIOD)
             .setRequiredNetworkType(JobInfo.NETWORK_TYPE_UNMETERED)
             .setPersisted(true)
             .build());
+        if(accepted!=JobScheduler.RESULT_SUCCESS)
+            throw new IllegalStateException("Android 系统未接受每日 Wi-Fi 自动更新任务，请检查省电限制");
     }
 
     @Override public boolean onStartJob(JobParameters params) {
