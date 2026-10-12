@@ -49,8 +49,6 @@ jobs:
         run: python3 tools/enable_db_update_ui.py
       - name: Enable incremental background sync UI
         run: python3 tools/enable_delta_sync_ui.py
-      - name: Enable incremental sync interface
-        run: python3 tools/enable_delta_sync_ui.py
       - name: Assemble debug APK
         run: gradle -p android-app --no-daemon --stacktrace assembleDebug
       - name: Verify APK and package
