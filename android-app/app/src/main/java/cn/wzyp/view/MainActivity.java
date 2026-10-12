@@ -23,6 +23,7 @@ public final class MainActivity extends Activity {
     private static final int FILE_REQUEST=501;
     private WebView web;
     private AiBridge aiBridge;
+    private DataUpdateManager dataManager;
     private android.webkit.ValueCallback<Uri[]> fileCallback;
 
     @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
@@ -33,6 +34,7 @@ public final class MainActivity extends Activity {
         try {
             OfflineStore store=new OfflineStore(this);
             aiBridge=new AiBridge(this,store);
+            dataManager=new DataUpdateManager(this,store);
             web=new WebView(this);
             setContentView(web);
             WebSettings ws=web.getSettings();
@@ -49,7 +51,9 @@ public final class MainActivity extends Activity {
             ws.setDefaultTextEncodingName("UTF-8");
             web.addJavascriptInterface(store,"WzypOffline");
             web.addJavascriptInterface(aiBridge,"WzypAI");
+            web.addJavascriptInterface(dataManager,"WzypData");
             aiBridge.attachWebView(web);
+            dataManager.attachWebView(web);
             web.setWebViewClient(new WebViewClient() {
                 @Override public boolean shouldOverrideUrlLoading(WebView view, android.webkit.WebResourceRequest request) {
                     Uri link=request.getUrl();
@@ -91,6 +95,10 @@ public final class MainActivity extends Activity {
 
     @Override protected void onActivityResult(int req,int result,Intent data) {
         super.onActivityResult(req,result,data);
+        if(req==DataUpdateManager.PICK_DATABASE && dataManager!=null) {
+            dataManager.onFileResult(result,data);
+            return;
+        }
         if(req==FILE_REQUEST && fileCallback!=null){
             fileCallback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result,data));
             fileCallback=null;
@@ -108,6 +116,7 @@ public final class MainActivity extends Activity {
 
     @Override protected void onDestroy() {
         if(fileCallback!=null){fileCallback.onReceiveValue(null);fileCallback=null;}
+        if(dataManager!=null){dataManager.close();dataManager=null;}
         if(aiBridge!=null){aiBridge.close();aiBridge=null;}
         if(web!=null){web.stopLoading();web.destroy();web=null;}
         super.onDestroy();
