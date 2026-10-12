@@ -1,35 +1,46 @@
-# wzyp-view Android v2.0.0 · 离线单机版
+# wzyp-view Android v3.0.0 · 离线数据 + 自定义 AI API
 
-Android 8.0+，无需网络权限，不用部署 FastAPI / MySQL / Python / LLM。
+Android 8.0+。APK 内置 SQLite，统计、图表、店铺/商品筛选、详情等始终本地运行。AI 聊天可以由用户自行接入兼容接口。
 
-## 已实现
+## 在手机上配置通用大模型
 
-- 原网页全部数据浏览页面：总览、分布图、热词、店铺/商品查询、筛选、排序、分页、商品详情。
-- 安装包内预置 SQLite 数据（由上游 Samge0/wzyp-view **v1.0.0 静态历史快照**的 \`wzyp-data.zip\` 在 CI 编译时转换）；
-- 本地统计问答及店铺/商品查询结果分析，无外部服务器，记录保存在手机私有存储。
-- 会话列表、新对话、切换、清空/删除聊天、导入/导出本地聊天备份（使用系统分享界面）。
-- 手机竖屏适配，Android 系统文件选择。
+安装后打开 **设置 → 通用大模型 API**：
 
-## 核心限制（务必了解）
+1. 选择 **通用大模型 API** 模式。
+2. **Base URL** 输入服务商的 OpenAI 兼容地址，例如 `https://api.example.com/v1`；也支持完整的 `https://api.example.com/v1/chat/completions`。
+3. **Model** 填写实际模型 ID，例如 `deepseek-chat`、`qwen-plus`（请以所用服务商实际支持的模型为准）。
+4. **API Key** 填写你的密钥，或对局域网内无鉴权的服务留空。
+5. 点击 **保存配置 → 测试连接**，然后进入 **AI 分析** 提问。
 
-1. **AI 分析为内置规则分析引擎，并非原 LangGraph/LLM 模型。** 可以准确执行支持的统计分析意图，开放式复杂生成/追问能力较弱。UI 不得宣称与原云端大模型完全等价。
-2. 商品详情描述保存离线文本；外链和网络图片在飞行模式下不可用。
-3. 数据固定为上游发行时的历史快照；不包含平台之后更新。
-4. 无互联网权限，不能在线同步、自动更新数据库或调用云端模型。
-5. 测试包使用 CI 默认调试签名；不同构建签名可能变化，可能要先卸载旧版。
+API 格式：`POST /chat/completions`，JSON 请求包含 `model`、`messages` 和 `stream:false`；响应读取 `choices[0].message.content`，当前为**非流式**完整回复。支持提供 OpenAI 兼容接口的 OpenAI、DeepSeek、Qwen、OpenRouter、Ollama 网关等。Anthropic 原生 Messages、Google Gemini 原生接口及 OpenAI Responses API **不能直接当作兼容的 Chat Completions 使用**。
 
-## CI 编译、校验、发布
+## 离线保留能力
 
-修改 \`android-app/**\`、\`tools/**\` 或 workflow 后需触发 GitHub Actions（也支持手动执行）：
+- 250 家店铺、11,042 件商品、10,769 条详情（上游 v1.0.0 的固定历史快照）。
+- 数据查询、筛选、排序、图表始终在手机 SQLite 执行。
+- 断网时可手动切换到 **本地规则分析**，继续基本统计问答。
+- 会话保存在手机私有存储，可导入和导出聊天备份。
 
-[Android APK workflow](../../actions/workflows/android-apk.yml)
+## 安全与隐私
 
-构建从 \`https://github.com/Samge0/wzyp-view/releases/download/v1.0.0/wzyp-data.zip\` 下载数据（**仅发生在 CI 编译机**），转换成 \`seed.db\`、将离线页面复制到 Android assets，运行 Gradle 和 apksigner 验证后发布 Release。手机运行阶段不发生任何网络访问。
+- Android `INTERNET` 权限仅供用户自行配置的原生 API 请求使用；WebView 页面仍禁止网络加载。
+- API Key 经 Android Keystore AES-GCM 加密存储，设置页不回显原 Key，聊天备份不包含 Key。
+- 公网只允许 HTTPS；HTTP 仅用于本机或可信局域网模型服务（HTTP 传输本身不加密）。
+- 使用在线 AI 时，当前问题、最近聊天记录和经过筛选的历史统计/商品数据将发送给所配置服务商，以提供数据依据；完整数据库、联系方式、raw_json、Key 不作为上下文发送。
+- 接口失败显示错误，不会默默伪装为本地结果；用户可选择离线规则模式。
+- 固定历史数据不代表实时库存或价格；若模型所需证据不足，应提示在本机继续筛选查看。
 
-本地编译前运行：
+## 构建与 APK
 
-\`\`\`bash
+由 [Android APK workflow](../../actions/workflows/android-apk.yml) 构建并通过 [Releases](../../releases) 发布。
+
+本地开发依次执行：
+
+```bash
 python3 tools/build_offline_db.py
 python3 tools/build_offline_web.py
+python3 tools/enable_api_ui.py
 gradle -p android-app --no-daemon assembleDebug
-\`\`\`
+```
+
+构建使用上游固定版本数据包（仅 CI 在编译时联网下载），打包成 `seed.db`。Debug 签名在不同 CI 运行之间不保证相同，如覆盖安装遇到签名不符，先备份旧应用数据，再卸载重装。正式发行需配置稳定的签名证书。
