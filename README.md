@@ -31,7 +31,7 @@
 
 ![设置页](docs/screenshot-settings.png)
 
-## 📱 Android v8 · 固定发布签名 + 加速公开店铺刷新 + 离线数据库 + AI API
+## 📱 Android v8.0.1 · 修复自动更新权限 + 固定发布签名 + 加速公开店铺刷新 + 离线数据库 + AI API
 
 - [Android APK 下载](../../releases) · [GitHub Actions 构建](../../actions/workflows/android-apk.yml)
 - [详细配置和构建指南](android-app/README.md)
@@ -42,6 +42,9 @@
 - **AI 分析：** Android 设置页可自行填写 OpenAI Chat Completions 兼容 **Base URL / Model / API Key**；支持测试连接并可切换回本地规则分析。
 - API Key 由 Android Keystore 加密保存；公网要求 HTTPS；使用在线 AI 时只向自选服务商提供相关统计摘要与问题，不上传完整数据库。
 - **注意：** 在线 AI 需要网络；原生 Anthropic/Gemini 等非 OpenAI 兼容协议需网关适配。历史快照不可当作实时商品数据。
+
+
+**v8.0.1 修复：** 为 JobScheduler 的联网约束补齐 `ACCESS_NETWORK_STATE` 系统普通权限，同时更新 CI 自动验证与同步失败提示。尚需配置持久发布签名 Secrets；未配置时不会发布新的临时签名 APK。
 
 ## 🔐 Android v8 固定签名升级
 
