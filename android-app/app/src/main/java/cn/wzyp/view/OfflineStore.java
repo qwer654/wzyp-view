@@ -35,6 +35,7 @@ public final class OfflineStore {
     private final File dbPath;
     private final SharedPreferences prefs;
     private JSONObject statsCache;
+    private String statsRevision;
 
     private static final Set<String> SHOP_FILTERS = new HashSet<>(Arrays.asList(
         "token","nickname","login_province","contact_qq","sell_count",
@@ -81,6 +82,7 @@ public final class OfflineStore {
      * private storage and invoke this method on a worker thread.
      */
     public synchronized JSONObject installSnapshot(File candidate, String source) throws Exception {
+        synchronized (OfflineStore.class) {
         if(candidate==null || !candidate.isFile() || candidate.length()<4096)
             throw new Exception("数据库文件为空或不是有效的 SQLite");
         if(candidate.length()>600L*1024L*1024L)
@@ -113,6 +115,7 @@ public final class OfflineStore {
             statsCache=null;
             throw failure;
         }
+    }
     }
 
     /** Validation occurs before closing the active database. */
@@ -174,6 +177,7 @@ public final class OfflineStore {
 
     /** Apply a versioned JSON delta in a single SQLite transaction. Model-generated SQL is never accepted. */
     public synchronized JSONObject applyDelta(JSONObject feed) throws Exception {
+        synchronized (OfflineStore.class) {
         if(feed.optInt("schema_version",-1)!=1)throw new Exception("不支持的数据源协议版本");
         String revision=feed.optString("revision","").trim();
         if(revision.isEmpty()||revision.length()>128)throw new Exception("同步数据缺少合法 revision");
@@ -290,6 +294,7 @@ public final class OfflineStore {
             db=SQLiteDatabase.openDatabase(dbPath.toString(),null,SQLiteDatabase.OPEN_READONLY);
             if(committed)statsCache=null;
         }
+    }
     }
 
     public synchronized String syncRevision() {
@@ -472,7 +477,9 @@ public final class OfflineStore {
     }
 
     private JSONObject stats() {
-        if(statsCache!=null)return statsCache;
+        String revision=syncRevision();
+        if(statsCache!=null && revision.equals(statsRevision))return statsCache;
+        statsCache=null;
         JSONObject s=one("SELECT "+
                 "(SELECT COUNT(*) FROM wzyp_shops) AS shop_count,"+
                 "(SELECT COUNT(*) FROM wzyp_goods) AS goods_count,"+
@@ -517,6 +524,7 @@ public final class OfflineStore {
         put(statsCache,"type_dist",typeDist);
         put(statsCache,"price_buckets",buckets);
         put(statsCache,"top_keywords",words);
+        statsRevision=revision;
         return statsCache;
     }
 
