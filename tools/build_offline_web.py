@@ -106,10 +106,11 @@ async function loadSettings(){
     ' 件商品、'+Number(s.stats.detail_count).toLocaleString('zh-CN')+' 条商品详情';
 }
 function exportConfig(){
+  const savedThreads=JSON.parse(localStorage.getItem(THREADS_KEY)||'[]');
   const payload=JSON.stringify({
     format:'wzyp-android-offline-v2', export_time:new Date().toISOString(),
     threads:localStorage.getItem(THREADS_KEY) || '[]',
-    backups:threads.map(t=>({id:t.id,history:JSON.parse(window.WzypOffline.request(
+    backups:savedThreads.map(t=>({id:t.id,history:JSON.parse(window.WzypOffline.request(
        '/api/chat/history?thread_id='+encodeURIComponent(t.id),'{}')).messages || []}))
   },null,2);
   window.WzypOffline.shareText(payload);
@@ -152,6 +153,13 @@ function resetLocalChats(){
 }
 """)
 
+# Protect the native bridge from HTML injected via untrusted dataset strings.
+# The original app accepts markdown; escape raw HTML before feeding it to marked.
+html=html.replace(
+    "const html = marked.parse(String(s||''), {breaks:true, gfm:true});",
+    "const html = marked.parse(String(s||'').replace(/</g,'&lt;').replace(/>/g,'&gt;'), {breaks:true, gfm:true});"
+)
+
 # block local network resource loads in WebView; even external links remain browser-only.
 html=html.replace('href="/static/favicon.svg"','href="favicon.svg"')
 html=html.replace('<title>wzyp 店铺数据洞察</title>', '<title>wzyp 离线数据洞察</title>')
@@ -167,4 +175,15 @@ assert 'id="page-settings"' in html
 original_sections=(root / "static" / "index.html").read_text(encoding="utf-8").count('</section>')
 generated_sections=html.count('</section>')
 assert generated_sections == original_sections, f"unbalanced sections: generated={generated_sections}, original={original_sections}"
-print("Offline HTML packaged", len(html), "bytes")
+# Node.js is preinstalled on GitHub Actions. Fail the build for any invalid JS.
+import re
+import subprocess
+for i, snippet in enumerate(re.findall(r'<script(?:\\s[^>]*)?>(.*?)</script>', html, re.S | re.I)):
+    if snippet.strip():
+        js_file = assets / f"inline-validation-{i}.js"
+        try:
+            js_file.write_text(snippet, encoding="utf-8")
+            subprocess.run(["node", "--check", str(js_file)], check=True)
+        finally:
+            js_file.unlink(missing_ok=True)
+print("Offline HTML packaged and JavaScript-validated", len(html), "bytes")
