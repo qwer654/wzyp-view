@@ -22,7 +22,14 @@ android {
         }
     }
     buildTypes {
+        debug {
+            // Side-by-side emergency QA app; NEVER replace or delete a signed production install.
+            applicationIdSuffix '.qa'
+            versionNameSuffix '-qa'
+            manifestPlaceholders = [appLabel: '链动小铺·修复测试版']
+        }
         release {
+            manifestPlaceholders = [appLabel: '链动小铺数据洞察']
             signingConfig signingConfigs.stableRelease
             minifyEnabled false
         }
