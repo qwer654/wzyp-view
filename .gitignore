@@ -6,3 +6,11 @@ __pycache__/
 .venv/
 settings.json
 dist/
+
+# PRIVATE Android signing credentials must never enter git history.
+*.keystore
+*.jks
+*.p12
+keystore-base64.txt
+signing-password.txt
+wzyp-v8-private-signing-kit.zip
