@@ -22,7 +22,7 @@ html=html.replace(needle, """      <div class="card">
           <label>指定店铺 Token / 店铺 URL（可选）</label>
           <input id="publicShopTarget" autocomplete="off" spellcheck="false"
              placeholder="留空按顺序刷新；或 https://wzyp.cn/shop/xxxx">
-          <div class="hint">输入指定店铺时只刷新该店。仅支持已存在于本地数据库的店铺，暂不自动发现新店铺。</div>
+          <div class="hint">输入指定店铺时只刷新该店。支持手动指定未收录的店铺：公开接口返回商品后自动添加到本地库。</div>
         </div>
         <div class="form-row">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
@@ -37,7 +37,7 @@ html=html.replace(needle, """      <div class="card">
           <button class="btn btn-ghost" onclick="savePublicAuto()">保存自动更新设置</button>
         </div>
         <div id="publicShopProgress" class="test-result" style="line-height:1.8;white-space:pre-line"></div>
-        <p class="hint" style="line-height:1.8">接口若要求登录、验证码、返回 HTML 验证页面或限流，将提示并停止，不绕过验证。新商品可添加到已知店铺；未获取到的旧商品不会被误删。商品详情全文及新店铺发现需要单独接口。</p>
+        <p class="hint" style="line-height:1.8">接口若要求登录、验证码、返回 HTML 验证页面或限流，将提示并停止，不绕过验证。新店铺可通过粘贴链接添加，新商品可同步；未获取到的旧商品不会被误删。商品详情全文及新店铺发现需要单独接口。</p>
       </div>
 """ + needle,1)
 html=html.replace("v5.0.0","v6.0.0")
