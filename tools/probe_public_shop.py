@@ -11,8 +11,12 @@ from urllib.request import Request,urlopen
 from urllib.error import HTTPError,URLError
 
 DB="android-app/app/src/main/assets/seed.db"
-with sqlite3.connect(DB) as conn:
-    token=conn.execute("SELECT token FROM wzyp_shops WHERE token != '' ORDER BY token LIMIT 1").fetchone()[0]
+if __import__("os").path.isfile(DB):
+    with sqlite3.connect(DB) as conn:
+        token=conn.execute("SELECT token FROM wzyp_shops WHERE token != '' ORDER BY token LIMIT 1").fetchone()[0]
+else:
+    # A publicly referenced seller: https://wzyp.cn/shop/youzhi
+    token="youzhi"
 print("Probing public storefront for one already-known shop; no auth or retries",flush=True)
 request=Request("https://wzyp.cn/shopApi/Shop/goodsList",
     data=json.dumps({"token":token,"keywords":"","category_id":"","goods_type":"card",
