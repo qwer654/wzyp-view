@@ -1,4 +1,4 @@
-# wzyp-view Android v5.0.0 · SQLite 增量同步 / 自动检查 / 大模型 API
+# wzyp-view Android v6.0.0 · 公开店铺直接刷新 / SQLite 增量同步 / 自选 AI API
 
 Android 8.0+。APK 内置 SQLite，统计、图表、店铺/商品筛选、详情等始终本地运行。AI 聊天可以由用户自行接入兼容接口。
 
@@ -40,6 +40,27 @@ python tools/export_mysql_snapshot.py --host 127.0.0.1 --port 3306 --user root -
 如果你只拥有原仓库的 `wzyp-data.zip` SQL 快照，也可在电脑运行 `WZYP_DATA_ZIP=/your/path/wzyp-data.zip python tools/build_offline_db.py`，它会生成 `android-app/app/src/main/assets/seed.db`（**只是该 ZIP 的对应历史数据，并非实时更新**）。
 
 不要把数据库、MySQL 密码、原始服务端管理接口直接公开到互联网。对数据库下载链接设置访问控制，HTTPS 只解决传输加密，不保证文件由可信方提供。
+
+## v6：直接刷新链动小铺公开店铺商品（无需自备更新 JSON）
+
+v6 新增 **设置 → 官方公开店铺 · 直接刷新**。它尝试直接通过链动小铺的公开店铺商品列表接口 `POST https://wzyp.cn/shopApi/Shop/goodsList` 获取数据；参数含本地已有店铺的 token、商品类型、分页等。接口信息参考开源项目 [qion888/ldsub2api](https://github.com/qion888/ldsub2api) 的 `backend/monitor_core/storefront.py`。
+
+使用方式：
+
+1. 手机联网，打开「设置 → 官方公开店铺 · 直接刷新」。
+2. **留空店铺输入框**：自动从已知的 250 家店铺中顺序刷新下一批 4 或 8 家；上次成功的位置本机持久保存，可多次点击继续刷新。
+3. **填入已有店铺 Token 或 `https://wzyp.cn/shop/TOKEN`**：仅刷新这家店。
+4. **自动更新开关**：明确启用后，Android JobScheduler 每 24 小时左右、仅在非计费网络/Wi-Fi 条件下最多检查 4 家已知店铺；Android 省电策略和厂商限制可能推迟或取消后台执行。
+5. 从公开商品列表提取 `goods_key`、商品名、价格、市场价、商品类型及上架状态，使用 SQLite 事务更新。新商品插入已有店铺，已有记录逐字段更新；遇到平台拒绝、验证码、HTML 验证页、解析失败或请求不完整时，不提交**该店**的数据。
+
+为避免对网站施加不必要负担，列表请求之间最少间隔约 1.3 秒；每种商品类型最多 6 页 × 50 条，超出即停止该店同步而不写入残缺快照。**不会登录、绕过 WAF 或 CAPTCHA，也不调用商家私有 API。**
+
+### 本次直接刷新尚不包含
+
+- **全站新增店铺自动发现**：仅从 APK 已有的店铺 token 或导入的新店铺列表进行刷新；可通过完整 SQLite/JSON 更新源添加新店铺。
+- 商品详情全文、图片文件自动下载及补全：公开列表主要提供商品简要信息；历史详情保留原样。
+- 尚未验证的全站接口：如果官网接口发生变化或要求登录验证，应用会显示具体失败信息，而不是伪造更新成功。
+- “直接刷新”与自选大模型 API 两个功能完全分离，**无需付费 AI Key**。
 
 ## v5 增量同步：不用重复下载整库
 
@@ -117,6 +138,7 @@ python3 tools/build_offline_web.py
 python3 tools/enable_api_ui.py
 python3 tools/enable_db_update_ui.py
 python3 tools/enable_delta_sync_ui.py
+python3 tools/enable_public_shop_ui.py
 gradle -p android-app --no-daemon assembleDebug
 ```
 
