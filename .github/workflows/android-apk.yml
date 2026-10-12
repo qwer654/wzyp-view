@@ -50,6 +50,13 @@ jobs:
           APK=android-app/app/build/outputs/apk/debug/app-debug.apk
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          # Enforce truly offline APK: network permissions must not be packaged.
+          if "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions "$APK" | grep -E 'android.permission.(INTERNET|ACCESS_NETWORK_STATE)'; then
+            echo "ERROR: offline APK requests network access" >&2
+            exit 1
+          fi
+          unzip -l "$APK" | grep -q 'assets/seed.db'
+          unzip -l "$APK" | grep -q 'assets/index.html'
           mkdir -p dist
           cp "$APK" dist/wzyp-view-android-v2.0.0-offline-debug.apk
           sha256sum dist/*.apk | tee dist/SHA256SUMS.txt
