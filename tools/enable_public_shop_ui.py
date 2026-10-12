@@ -19,6 +19,13 @@ html=html.replace(needle, """      <div class="card">
         </p>
         <div id="publicShopInfo" class="hint" style="line-height:1.8;white-space:pre-line;margin:8px 0"></div>
         <div class="form-row">
+          <label>公开站点域名（手动选择，不自动绕过平台验证）</label>
+          <select id="publicShopHost" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--line)">
+            <option value="wzyp.cn">wzyp.cn（默认）</option>
+            <option value="pay.ldxp.cn">pay.ldxp.cn（公开旧站）</option>
+          </select>
+        </div>
+        <div class="form-row">
           <label>指定店铺 Token / 店铺 URL（可选）</label>
           <input id="publicShopTarget" autocomplete="off" spellcheck="false"
              placeholder="留空按顺序刷新；或 https://wzyp.cn/shop/xxxx">
@@ -47,6 +54,7 @@ function renderPublicInfo(){
   try{
     const info=JSON.parse(window.WzypData.publicShopSettings());
     $('#publicShopAuto').checked=!!info.auto;
+    $('#publicShopHost').value=info.host||'wzyp.cn';
     const date=info.last_success?new Date(info.last_success).toLocaleString('zh-CN'):'无';
     $('#publicShopInfo').textContent=
       '下次轮到店铺序号：'+(Number(info.offset||0)+1)+
@@ -57,6 +65,11 @@ function renderPublicInfo(){
   }
 }
 function savePublicAuto(){
+  const hostResult=JSON.parse(window.WzypData.publicShopSetHost($('#publicShopHost').value));
+  if(hostResult._error){
+    $('#publicShopProgress').textContent=hostResult._error;
+    return false;
+  }
   const state=JSON.parse(window.WzypData.publicShopSetAuto($('#publicShopAuto').checked));
   const node=$('#publicShopProgress');
   if(state._error){
