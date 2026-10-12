@@ -65,11 +65,23 @@ public final class DeltaSyncEngine {
         boolean enabled=input.optBoolean("enabled",false);
         if(!url.isEmpty())validate(url);
         if(enabled && url.isEmpty())throw new Exception("启用定期更新前，请先填写 HTTPS 增量接口");
+        String previousUrl=prefs.getString("url","");
+        boolean previousEnabled=prefs.getBoolean("enabled",false);
+        String previousEtag=prefs.getString("etag","");
         SharedPreferences.Editor edit=prefs.edit();
-        if(!url.equals(prefs.getString("url","")))edit.remove("etag");
+        if(!url.equals(previousUrl))edit.remove("etag");
         edit.putString("url",url).putBoolean("enabled",enabled);
         if(!edit.commit())throw new Exception("保存同步设置失败");
-        schedule(context);
+        try {
+            schedule(context);
+        }catch(Exception failure){
+            SharedPreferences.Editor restore=prefs.edit()
+                .putString("url",previousUrl).putBoolean("enabled",previousEnabled);
+            if(previousEtag.isEmpty())restore.remove("etag");
+            else restore.putString("etag",previousEtag);
+            restore.commit();
+            throw new Exception("系统拒绝后台增量任务，原设置已保留："+failure.getMessage(),failure);
+        }
         return settings(context,store);
     }
 
@@ -88,7 +100,8 @@ public final class DeltaSyncEngine {
             .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
             .setPersisted(true)
             .build();
-        jobs.schedule(info);
+        if(jobs.schedule(info)!=JobScheduler.RESULT_SUCCESS)
+            throw new IllegalStateException("Android 未接受增量同步定时任务");
     }
 
     public static JSONObject sync(Context context,OfflineStore store,Progress cb) throws Exception {
