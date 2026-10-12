@@ -261,7 +261,7 @@ public final class OfflineStore {
                     boolean exists=old!=null;
                     boolean changed=!exists ||
                         !name.equals(old[0]) ||
-                        Math.abs(price-toDouble(old[1]))>0.00000001 ||
+                        Double.compare(price,toDouble(old[1]))!=0 ||
                         !marketText.equals(old[2]) ||
                         !status.equals(old[3]) ||
                         !type.equals(old[4]);
