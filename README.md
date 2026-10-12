@@ -31,13 +31,15 @@
 
 ![设置页](docs/screenshot-settings.png)
 
-## 📱 Android APK 客户端
+## 📱 Android APK · 完全离线数据版 v2
 
-此仓库已新增 [Android 原生客户端](android-app/README.md)，支持 Android 8.0 以上手机，提供服务器地址配置、移动端布局、文件选择与外链处理。
+Android 8.0+，不需要服务器、数据库账号或联网权限。
 
-- **下载 APK：** [Releases](../../releases)（Android APK 工作流构建成功后发布）
-- **构建记录：** [Android APK · Actions](../../actions/workflows/android-apk.yml)
-- **重要：** Android App 是远程 FastAPI WebView 客户端；必须先部署 Python 后端、MySQL（及使用 AI 分析时的 LLM）。公网部署应设置 HTTPS 与服务端认证，原管理 API 不可直接公开。
+- **APK 下载：** [Releases](../../releases)
+- **构建与验收：** [Android APK · Actions](../../actions/workflows/android-apk.yml)
+- **代码及说明：** [Android 离线单机版](android-app/README.md)
+- **功能：** 内置 SQLite 历史快照（250 店铺 / 11,042 商品 / 10,769 详情），离线数据图表、筛选、查询、排序、分页、商品详情、离线统计问答及本地会话备份。
+- **区别：** 离线统计聊天采用规则分析引擎，**不等同于原 LangGraph 自由生成 AI**；原站外链、远程图片及数据在线更新需网络，不属于离线能力。
 
 ## 快速开始
 
