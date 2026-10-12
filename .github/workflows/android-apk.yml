@@ -90,12 +90,12 @@ jobs:
             exit 1
           fi
           echo "Verified stable signer: $ACTUAL_FINGERPRINT"
-          # Explicit network permission: only used by user-configured native AI API.
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions "$APK" | grep -F 'android.permission.INTERNET'
-          if "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions "$APK" | grep -F 'android.permission.ACCESS_NETWORK_STATE'; then
-            echo "Unexpected network state permission" >&2
-            exit 1
-          fi
+          # INTERNET: online AI and public data fetch; ACCESS_NETWORK_STATE is
+          # REQUIRED by JobScheduler for NETWORK_TYPE_ANY/NETWORK_TYPE_UNMETERED.
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions "$APK" | grep -F "android.permission.INTERNET"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions "$APK" | grep -F "android.permission.ACCESS_NETWORK_STATE"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump xmltree "$APK" AndroidManifest.xml | grep -F '.PublicRefreshJob'
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump xmltree "$APK" AndroidManifest.xml | grep -F '.DeltaSyncJob'
           unzip -l "$APK" | grep -q 'assets/seed.db'
           unzip -l "$APK" | grep -q 'assets/index.html'
           mkdir -p dist
