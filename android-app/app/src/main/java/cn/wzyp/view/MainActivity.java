@@ -17,11 +17,12 @@ import android.widget.Toast;
 
 /**
  * Local-only Android entry point. All assets and SQLite rows are inside the APK;
- * no Internet permission, endpoint selection, Web server or remote LLM.
+ * data stays on-device; only user-configured AI API requests use native networking.
  */
 public final class MainActivity extends Activity {
     private static final int FILE_REQUEST=501;
     private WebView web;
+    private AiBridge aiBridge;
     private android.webkit.ValueCallback<Uri[]> fileCallback;
 
     @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
@@ -31,6 +32,7 @@ public final class MainActivity extends Activity {
         getWindow().getDecorView().setSystemUiVisibility(android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
         try {
             OfflineStore store=new OfflineStore(this);
+            aiBridge=new AiBridge(this,store);
             web=new WebView(this);
             setContentView(web);
             WebSettings ws=web.getSettings();
@@ -46,6 +48,8 @@ public final class MainActivity extends Activity {
             ws.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
             ws.setDefaultTextEncodingName("UTF-8");
             web.addJavascriptInterface(store,"WzypOffline");
+            web.addJavascriptInterface(aiBridge,"WzypAI");
+            aiBridge.attachWebView(web);
             web.setWebViewClient(new WebViewClient() {
                 @Override public boolean shouldOverrideUrlLoading(WebView view, android.webkit.WebResourceRequest request) {
                     Uri link=request.getUrl();
@@ -104,6 +108,7 @@ public final class MainActivity extends Activity {
 
     @Override protected void onDestroy() {
         if(fileCallback!=null){fileCallback.onReceiveValue(null);fileCallback=null;}
+        if(aiBridge!=null){aiBridge.close();aiBridge=null;}
         if(web!=null){web.stopLoading();web.destroy();web=null;}
         super.onDestroy();
     }
