@@ -36,6 +36,10 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
+      - name: Build bundled offline SQLite data
+        run: python3 tools/build_offline_db.py
+      - name: Bundle offline HTML interface
+        run: python3 tools/build_offline_web.py
       - name: Assemble debug APK
         run: gradle -p android-app --no-daemon --stacktrace assembleDebug
       - name: Verify APK and package
@@ -46,7 +50,7 @@ jobs:
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           mkdir -p dist
-          cp "$APK" dist/wzyp-view-android-v1.0.0-debug.apk
+          cp "$APK" dist/wzyp-view-android-v2.0.0-offline-debug.apk
           sha256sum dist/*.apk | tee dist/SHA256SUMS.txt
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
@@ -63,6 +67,6 @@ jobs:
           TAG: android-build-${{ github.run_number }}
         shell: bash
         run: |
-          gh release create "$TAG" dist/wzyp-view-android-v1.0.0-debug.apk dist/SHA256SUMS.txt \
-            --title "Android v1.0.0 · Build ${{ github.run_number }}" \
-            --notes "Android 8.0+ 安装包（调试签名）。需要自行部署 wzyp-view FastAPI + MySQL 后端并在应用中配置地址。不同工作流运行的调试签名可能不同，升级时可能需要先卸载旧版。"
+          gh release create "$TAG" dist/wzyp-view-android-v2.0.0-offline-debug.apk dist/SHA256SUMS.txt \
+            --title "Android v2.0.0 Offline · Build ${{ github.run_number }}" \
+            --notes "Android 8.0+ 完全离线安装包（调试签名）。内置 SQLite 店铺/商品数据，离线查询/统计和规则型数据分析，无任何联网权限；规则分析不等同于原 LangGraph 大模型。不同构建的调试签名可能不同，升级可能需要卸载旧版。"
