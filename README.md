@@ -31,6 +31,14 @@
 
 ![设置页](docs/screenshot-settings.png)
 
+## 📱 Android APK 客户端
+
+此仓库已新增 [Android 原生客户端](android-app/README.md)，支持 Android 8.0 以上手机，提供服务器地址配置、移动端布局、文件选择与外链处理。
+
+- **下载 APK：** [Releases](../../releases)（Android APK 工作流构建成功后发布）
+- **构建记录：** [Android APK · Actions](../../actions/workflows/android-apk.yml)
+- **重要：** Android App 是远程 FastAPI WebView 客户端；必须先部署 Python 后端、MySQL（及使用 AI 分析时的 LLM）。公网部署应设置 HTTPS 与服务端认证，原管理 API 不可直接公开。
+
 ## 快速开始
 
 ### 方式一：本地运行（uv）
