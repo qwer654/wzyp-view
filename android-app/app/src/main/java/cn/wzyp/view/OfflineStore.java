@@ -436,6 +436,19 @@ public final class OfflineStore {
         return out;
     }
 
+
+    /** Android shares a JSON backup through the OS chooser; no network request is performed by the app. */
+    @JavascriptInterface
+    public void shareText(String content) {
+        if(content == null || content.length()>3000000) return;
+        android.content.Intent send=new android.content.Intent(android.content.Intent.ACTION_SEND);
+        send.setType("application/json");
+        send.putExtra(android.content.Intent.EXTRA_TEXT,content);
+        android.content.Intent chooser=android.content.Intent.createChooser(send,"导出离线数据备份");
+        chooser.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+        context.startActivity(chooser);
+    }
+
     @JavascriptInterface
     public synchronized String request(String path, String bodyString) {
         try {
