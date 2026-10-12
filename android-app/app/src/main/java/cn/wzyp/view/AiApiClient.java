@@ -67,6 +67,9 @@ public final class AiApiClient {
             throw new Exception("请先填写 Base URL");
         SharedPreferences.Editor editor=prefs.edit()
             .putString(BASE,base).putString(MODEL,model).putString(MODE,mode);
+        // Changing the endpoint must never forward the prior provider's saved key.
+        if(!base.equals(prefs.getString(BASE,"")) && data.optString("apikey","").trim().isEmpty())
+            editor.remove(SECRET);
         if(data.optBoolean("clear_key",false)) editor.remove(SECRET);
         else {
             String key=data.optString("apikey","").trim();
