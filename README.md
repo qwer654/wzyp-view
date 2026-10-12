@@ -31,7 +31,7 @@
 
 ![设置页](docs/screenshot-settings.png)
 
-## 📱 Android v7 · 加速公开店铺刷新 + 离线数据库 + AI API
+## 📱 Android v8 · 固定发布签名 + 加速公开店铺刷新 + 离线数据库 + AI API
 
 - [Android APK 下载](../../releases) · [GitHub Actions 构建](../../actions/workflows/android-apk.yml)
 - [详细配置和构建指南](android-app/README.md)
@@ -42,6 +42,12 @@
 - **AI 分析：** Android 设置页可自行填写 OpenAI Chat Completions 兼容 **Base URL / Model / API Key**；支持测试连接并可切换回本地规则分析。
 - API Key 由 Android Keystore 加密保存；公网要求 HTTPS；使用在线 AI 时只向自选服务商提供相关统计摘要与问题，不上传完整数据库。
 - **注意：** 在线 AI 需要网络；原生 Anthropic/Gemini 等非 OpenAI 兼容协议需网关适配。历史快照不可当作实时商品数据。
+
+## 🔐 Android v8 固定签名升级
+
+此前的 v1–v7 安装包使用 CI 临时调试证书，**不同构建可能无法覆盖安装**。v8 改为从私有 GitHub Actions Secrets 读取持久 PKCS12 发布证书（`assembleRelease`），并强制核对证书 SHA-256；缺失密钥时 **拒绝构建和发布**，不再默默换签名。
+
+仓库维护者先在 GitHub 设置 `WZYP_SIGNING_KEYSTORE_B64` 和 `WZYP_SIGNING_PASSWORD` 两个 Secrets，配置和首次迁移说明见 [Android 固定签名指南](android-app/SIGNING.md)。私钥来自本次 ChatGPT 会话提供的**私有**签名工具包，不在仓库中。旧版用户如无旧版原始私钥，仍须先备份再卸载一次；此后固定签名版本可正常覆盖升级。
 
 ## 快速开始
 
