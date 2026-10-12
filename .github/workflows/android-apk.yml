@@ -43,6 +43,8 @@ jobs:
         run: python3 tools/build_offline_web.py
       - name: Enable configurable AI API interface
         run: python3 tools/enable_api_ui.py
+      - name: Enable database update panel
+        run: python3 tools/enable_db_update_ui.py
       - name: Assemble debug APK
         run: gradle -p android-app --no-daemon --stacktrace assembleDebug
       - name: Verify APK and package
@@ -61,7 +63,7 @@ jobs:
           unzip -l "$APK" | grep -q 'assets/seed.db'
           unzip -l "$APK" | grep -q 'assets/index.html'
           mkdir -p dist
-          cp "$APK" dist/wzyp-view-android-v3.0.0-api-debug.apk
+          cp "$APK" dist/wzyp-view-android-v4.0.0-db-update-debug.apk
           sha256sum dist/*.apk | tee dist/SHA256SUMS.txt
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
@@ -78,6 +80,6 @@ jobs:
           TAG: android-build-${{ github.run_number }}
         shell: bash
         run: |
-          gh release create "$TAG" dist/wzyp-view-android-v3.0.0-api-debug.apk dist/SHA256SUMS.txt \
-            --title "Android v3.0.0 API · Build ${{ github.run_number }}" \
-            --notes "Android 8.0+ 本地 SQLite 数据 + 用户自选 OpenAI 兼容 AI API。数据查询完全离线，AI API 需网络；密钥通过 Android Keystore 加密保存，可切换离线规则分析。调试签名不同可能需要备份并重装。"
+          gh release create "$TAG" dist/wzyp-view-android-v4.0.0-db-update-debug.apk dist/SHA256SUMS.txt \
+            --title "Android v4.0.0 DB Updates · Build ${{ github.run_number }}" \
+            --notes "Android 8.0+ 支持手机导入 SQLite 或自定义 HTTPS 数据库下载，完整性检查通过后热替换本地数据库；保留数据离线查询和自定义大模型 API。需要用户自己提供新数据文件或源；调试签名可能不同。"
