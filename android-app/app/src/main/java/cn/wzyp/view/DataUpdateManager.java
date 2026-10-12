@@ -60,6 +60,38 @@ public final class DataUpdateManager {
     }
 
     @JavascriptInterface
+    public String deltaSettings() {
+        return DeltaSyncEngine.settings(activity,store).toString();
+    }
+
+    @JavascriptInterface
+    public String saveDeltaSettings(String raw) {
+        try {
+            return DeltaSyncEngine.save(activity,store,new JSONObject(raw)).toString();
+        }catch(Exception e){
+            return put(new JSONObject(),"_error",e.getMessage()).toString();
+        }
+    }
+
+    @JavascriptInterface
+    public void syncDelta() {
+        if(!working.compareAndSet(false,true)) {
+            notifyJs("error","另一个数据库更新任务正在执行",0,null);
+            return;
+        }
+        io.execute(()->{
+            try {
+                DeltaSyncEngine.sync(activity,store,(stage,message,details)->
+                    notifyJs(stage,message,"updated".equals(stage)?100:-1,details));
+            }catch(Exception ignored){
+                // DeltaSyncEngine already relayed the exact error to the UI.
+            }finally {
+                working.set(false);
+            }
+        });
+    }
+
+    @JavascriptInterface
     public void chooseFile() {
         if(working.get()) {
             notifyJs("error","数据库更新正在进行",0,null);
@@ -178,6 +210,8 @@ public final class DataUpdateManager {
             if(current<4096)throw new Exception("文件太小，必须选择完整 SQLite 数据库");
             notifyJs("validating","检查 SQLite 完整性及店铺/商品表结构…",96,null);
             JSONObject info=store.installSnapshot(staging,source+(remote?"（远程）":""));
+            // The delta feed ETag is not valid after importing an unrelated full snapshot.
+            DeltaSyncEngine.preferences(activity).edit().remove("etag").apply();
             notifyJs("done","更新成功："+info.optLong("shops")+" 家店铺、"+
                 info.optLong("goods")+" 件商品、"+info.optLong("details")+" 条详情",100,info);
         }finally {
