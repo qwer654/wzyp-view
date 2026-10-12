@@ -198,7 +198,7 @@ public final class AiApiClient {
         put(payload,"model",model);
         put(payload,"messages",messages);
         put(payload,"stream",false);
-        put(payload,"max_tokens",maxTokens);
+        if(maxTokens>0)put(payload,"max_tokens",maxTokens);
         HttpURLConnection conn=(HttpURLConnection)url.openConnection();
         conn.setInstanceFollowRedirects(false); // never forward authorization to another host
         conn.setConnectTimeout(15000);
@@ -233,7 +233,7 @@ public final class AiApiClient {
         messages.put(put(put(new JSONObject(),"role","user"),"content","只回复 OK"));
         JSONObject result=new JSONObject();
         try{
-            String reply=complete(messages,24);
+            String reply=complete(messages,0);
             put(result,"ok",true);
             put(result,"reply",reply.substring(0,Math.min(180,reply.length())));
         }catch(Exception e){
