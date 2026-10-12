@@ -63,12 +63,13 @@ def main():
                 ddl.append('"'+col.replace('"','""')+'" '+kind)
             local.execute("CREATE TABLE "+table+" ("+",".join(ddl)+")")
             quoted=",".join('"'+col.replace('"','""')+'"' for col in cols)
+            mysql_quoted=",".join("`"+col.replace("`","``")+"`" for col in cols)
             placeholders=",".join("?" for _ in cols)
             insert=f"INSERT INTO {table} ({quoted}) VALUES ({placeholders})"
             rows_count=0
             # Server-side cursor reads large MySQL tables incrementally.
             with mysql.cursor(pymysql.cursors.SSCursor) as cur:
-                cur.execute("SELECT "+quoted+" FROM "+table)
+                cur.execute("SELECT "+mysql_quoted+" FROM "+table)
                 while True:
                     chunk=cur.fetchmany(500)
                     if not chunk:break
