@@ -49,6 +49,11 @@ jobs:
         run: python3 tools/enable_db_update_ui.py
       - name: Enable incremental background sync UI
         run: python3 tools/enable_delta_sync_ui.py
+      - name: Add public shop refresh UI
+        run: python3 tools/enable_public_shop_ui.py
+      - name: Probe one public storefront page (non-blocking; no challenge bypass)
+        continue-on-error: true
+        run: python3 tools/probe_public_shop.py
       - name: Assemble debug APK
         run: gradle -p android-app --no-daemon --stacktrace assembleDebug
       - name: Verify APK and package
@@ -67,7 +72,7 @@ jobs:
           unzip -l "$APK" | grep -q 'assets/seed.db'
           unzip -l "$APK" | grep -q 'assets/index.html'
           mkdir -p dist
-          cp "$APK" dist/wzyp-view-android-v5.0.0-delta-sync-debug.apk
+          cp "$APK" dist/wzyp-view-android-v6.0.0-public-sync-debug.apk
           sha256sum dist/*.apk | tee dist/SHA256SUMS.txt
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
@@ -84,6 +89,6 @@ jobs:
           TAG: android-build-${{ github.run_number }}
         shell: bash
         run: |
-          gh release create "$TAG" dist/wzyp-view-android-v5.0.0-delta-sync-debug.apk dist/SHA256SUMS.txt \
+          gh release create "$TAG" dist/wzyp-view-android-v6.0.0-public-sync-debug.apk dist/SHA256SUMS.txt \
             --title "Android v5.0.0 Delta Sync · Build ${{ github.run_number }}" \
             --notes "Android 8.0+ SQLite 离线浏览、手工导入完整数据库、自选 HTTPS JSON 增量同步源和可选 12 小时后台检查，更新通过事务回滚，保留自定义大模型 API。更新地址须由用户提供；不预置采集/绕过登录功能。"
