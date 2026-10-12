@@ -85,13 +85,21 @@ public final class DataUpdateManager {
 
     @JavascriptInterface
     public String publicShopSetAuto(boolean enabled) {
+        android.content.SharedPreferences preferences=
+            activity.getSharedPreferences("wzyp_public_sync_v6",0);
+        boolean previous=preferences.getBoolean("auto",false);
         try {
-            activity.getSharedPreferences("wzyp_public_sync_v6",0)
-                .edit().putBoolean("auto",enabled).apply();
+            if(!preferences.edit().putBoolean("auto",enabled).commit())
+                throw new Exception("自动同步开关无法写入手机设置");
             PublicRefreshJob.schedule(activity);
             return publicShopSettings();
         }catch(Exception e){
-            return put(new JSONObject(),"_error",e.getMessage()).toString();
+            // A rejected scheduler request must not leave the switch falsely enabled.
+            preferences.edit().putBoolean("auto",previous).commit();
+            String reason=e.getMessage()==null?e.getClass().getSimpleName():e.getMessage();
+            if(reason.contains("ACCESS_NETWORK_STATE"))
+                reason="当前安装版本缺少系统网络状态权限，请安装修复版 APK";
+            return put(new JSONObject(),"_error","自动更新设置未生效："+reason).toString();
         }
     }
 
