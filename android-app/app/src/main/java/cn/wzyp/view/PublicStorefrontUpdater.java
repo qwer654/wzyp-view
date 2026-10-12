@@ -43,10 +43,17 @@ public final class PublicStorefrontUpdater {
         return o;
     }
     private SharedPreferences prefs(){return context.getSharedPreferences(PREFS,Context.MODE_PRIVATE);}
+    private String publicHost() {
+        String host=prefs().getString("host",HOST);
+        if("wzyp.cn".equals(host)||"pay.ldxp.cn".equals(host))return host;
+        return HOST;
+    }
+
 
     public JSONObject info(){
         JSONObject result=new JSONObject();
         SharedPreferences p=prefs();
+        put(result,"host",publicHost());
         put(result,"offset",p.getInt("offset",0));
         put(result,"last_run",p.getLong("last_run",0));
         put(result,"last_success",p.getLong("last_success",0));
@@ -61,7 +68,8 @@ public final class PublicStorefrontUpdater {
     }
 
     private JSONObject request(String token,String type,int page) throws Exception {
-        URL url=new URL("https://"+HOST+"/shopApi/Shop/goodsList");
+        String host=publicHost();
+        URL url=new URL("https://"+host+"/shopApi/Shop/goodsList");
         JSONObject payload=new JSONObject();
         put(payload,"token",token);
         put(payload,"keywords","");
@@ -79,8 +87,8 @@ public final class PublicStorefrontUpdater {
         connection.setDoOutput(true);
         connection.setRequestProperty("Content-Type","application/json; charset=utf-8");
         connection.setRequestProperty("Accept","application/json, text/plain, */*");
-        connection.setRequestProperty("Referer","https://"+HOST+"/shop/"+token);
-        connection.setRequestProperty("Origin","https://"+HOST);
+        connection.setRequestProperty("Referer","https://"+host+"/shop/"+token);
+        connection.setRequestProperty("Origin","https://"+host);
         connection.setRequestProperty("User-Agent","WzypView-Android/6.0");
         try {
             try(OutputStream output=connection.getOutputStream()){output.write(data);}
