@@ -181,8 +181,11 @@ public final class OfflineStore {
         if(changes==null)throw new Exception("同步响应缺少 changes");
         String[] tables={"wzyp_shops","wzyp_goods","wzyp_goods_detail"};
         String[] keys={"token","goods_key","goods_key"};
-        for(String key:JSONObject.getNames(changes)==null?new String[0]:JSONObject.getNames(changes))
+        java.util.Iterator<String> changeKeys=changes.keys();
+        while(changeKeys.hasNext()) {
+            String key=changeKeys.next();
             if(!Arrays.asList(tables).contains(key))throw new Exception("同步响应包含未知表："+key);
+        }
         // All local reads and model evidence are locked out while the transaction runs.
         db.close();
         SQLiteDatabase writable=null;
@@ -242,8 +245,10 @@ public final class OfflineStore {
                     if(row==null)throw new Exception("更新记录必须是 JSON 对象");
                     String id=row.optString(key,"");
                     if(id.isEmpty()||id.length()>300)throw new Exception(table+" 缺少 "+key);
-                    String[] names=JSONObject.getNames(row);
-                    if(names==null||names.length==0)throw new Exception("空更新记录");
+                    JSONArray jsonNames=row.names();
+                    if(jsonNames==null || jsonNames.length()==0)throw new Exception("空更新记录");
+                    String[] names=new String[jsonNames.length()];
+                    for(int ni=0;ni<names.length;ni++)names[ni]=jsonNames.getString(ni);
                     for(String column:names)
                         if(!columns.contains(column))throw new Exception("数据库没有字段 "+table+"."+column);
                     // Remove existing key (seed database does not declare primary keys).
