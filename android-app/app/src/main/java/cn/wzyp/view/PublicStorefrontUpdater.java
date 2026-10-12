@@ -150,6 +150,9 @@ public final class PublicStorefrontUpdater {
         if(!Double.isFinite(price)||price<0)throw new Exception("商品价格异常");
         String actualType=item.optString("goods_type",type);
         if(!Arrays.asList(TYPES).contains(actualType))actualType=type;
+        JSONObject seller=item.optJSONObject("user");
+        String shopName=seller==null?"":seller.optString("nickname","").trim();
+        put(out,"shop_name",shopName);
         put(out,"goods_key",key);
         put(out,"goods_type",actualType);
         put(out,"name",name);
