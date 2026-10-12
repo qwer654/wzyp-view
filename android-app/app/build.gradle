@@ -7,12 +7,23 @@ android {
         applicationId 'cn.wzyp.view'
         minSdk 26
         targetSdk 34
-        versionCode 7
-        versionName '7.0.0'
+        versionCode 8
+        versionName '8.0.0'
+    }
+    signingConfigs {
+        stableRelease {
+            // Signing credentials only come from the CI secret store or the owner's local environment.
+            // Never use a regenerated debug keystore for distributable builds.
+            storeFile file(System.getenv('WZYP_SIGNING_KEYSTORE_PATH') ?: 'missing-release-signing-key.p12')
+            storePassword System.getenv('WZYP_SIGNING_PASSWORD') ?: ''
+            keyAlias 'wzyp_release'
+            keyPassword System.getenv('WZYP_SIGNING_PASSWORD') ?: ''
+            storeType 'PKCS12'
+        }
     }
     buildTypes {
         release {
-            // First-install development key only: production signing must use a private keystore.
+            signingConfig signingConfigs.stableRelease
             minifyEnabled false
         }
     }
