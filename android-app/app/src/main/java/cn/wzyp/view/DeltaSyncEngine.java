@@ -81,6 +81,8 @@ public final class DeltaSyncEngine {
         if(!prefs.getBoolean("enabled",false)||url.isEmpty()){
             jobs.cancel(JOB_ID);return;
         }
+        // Avoid resetting a 12-hour deadline every time the user opens the app.
+        if(jobs.getPendingJob(JOB_ID)!=null)return;
         JobInfo info=new JobInfo.Builder(JOB_ID,new ComponentName(context,DeltaSyncJob.class))
             .setPeriodic(PERIOD_MS)
             .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
