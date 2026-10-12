@@ -47,13 +47,13 @@ python tools/export_mysql_snapshot.py --host 127.0.0.1 --port 3306 --user root -
 
 1. 把数据源的最新 SQLite 快照与上一版 SQLite 快照准备好（或者使用具有这些表的你自己的数据库导出）。
 2. 用仓库的命令生成**版本化 JSON 变更包**：
-   \`\`\`bash
+   ```bash
    python tools/build_delta_feed.py \
      --old previous.db --new current.db \
      --base-revision "" --revision "2026-10-12-r1" \
      --output wzyp-delta.json
-   \`\`\`
-   第一次从 v4/内置旧库切换为增量更新时，\`base_revision\` 为**空字符串**。第二次变更包必须采用 \`--base-revision "2026-10-12-r1"\`，下一版 \`revision\` 也需要更新。
+   ```
+   第一次从 v4/内置旧库切换为增量更新时，`base_revision` 为**空字符串**。第二次变更包必须采用 `--base-revision "2026-10-12-r1"`，下一版 `revision` 也需要更新。
 3. 把生成的 JSON 文件发布到**你自己控制的 HTTPS 地址**。手机打开“设置 → 增量同步”，填入 URL 并保存。
 4. 点击 **立即检查并同步**；你也可以选择 **开启自动检查**，Android JobScheduler 会按大约 12 小时的周期在有网络时安排检查。实际执行时间受 Android 省电策略影响。用户关闭开关后会取消后台任务。
 5. 版本无变化或服务器返回 HTTP 304 时不写库；版本变化时按键进行新增/修改/删除，使用 SQLite 事务，失败全部回滚。更新完成后当前统计自动刷新。
@@ -62,7 +62,7 @@ python tools/export_mysql_snapshot.py --host 127.0.0.1 --port 3306 --user root -
 
 HTTPS 响应 JSON 必须是以下结构。**不能直接填写 wzyp.cn 首页、第三方 AI API 地址或任意 MySQL 接口。**
 
-\`\`\`json
+```json
 {
   "schema_version": 1,
   "base_revision": "",
@@ -83,9 +83,9 @@ HTTPS 响应 JSON 必须是以下结构。**不能直接填写 wzyp.cn 首页、
     }
   }
 }
-\`\`\`
+```
 
-建议直接用 \`tools/build_delta_feed.py\` 从完整的旧/新 SQLite 导出；它会包含所有字段。简化 JSON 例子仅说明协议，并非一套完整快照。所有表名/列名均须存在于手机数据库。单份变更包最大 35 MB；如果有大量改动，请使用 v4 提供的**完整 SQLite 文件导入**，之后再以空 \`base_revision\` 建立新的增量链。
+建议直接用 `tools/build_delta_feed.py` 从完整的旧/新 SQLite 导出；它会包含所有字段。简化 JSON 例子仅说明协议，并非一套完整快照。所有表名/列名均须存在于手机数据库。单份变更包最大 35 MB；如果有大量改动，请使用 v4 提供的**完整 SQLite 文件导入**，之后再以空 `base_revision` 建立新的增量链。
 
 **数据不会凭空更新**：项目上游只提供历史快照，没有公开可直接验证的完整持续同步服务；你需要维护更新过的数据库或提供自有数据源。这个功能不会自动登录网站、抓取页面、绕过平台登录/限制。定期检查同步 URL 与大模型 API 完全独立；API Key 不作为增量接口凭证，也不会被发送给同步服务器。
 
