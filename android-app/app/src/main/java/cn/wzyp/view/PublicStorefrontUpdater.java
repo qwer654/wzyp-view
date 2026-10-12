@@ -96,8 +96,8 @@ public final class PublicStorefrontUpdater {
         byte[] data=payload.toString().getBytes(StandardCharsets.UTF_8);
         HttpURLConnection connection=(HttpURLConnection)url.openConnection();
         connection.setInstanceFollowRedirects(false);
-        connection.setConnectTimeout(14000);
-        connection.setReadTimeout(25000);
+        connection.setConnectTimeout(10000);
+        connection.setReadTimeout(18000);
         connection.setUseCaches(false);
         connection.setRequestMethod("POST");
         connection.setDoOutput(true);
