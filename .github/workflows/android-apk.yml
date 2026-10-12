@@ -22,6 +22,22 @@ jobs:
     steps:
       - name: Checkout project
         uses: actions/checkout@v4
+      - name: Load persistent release signing key
+        shell: bash
+        env:
+          WZYP_SIGNING_KEYSTORE_B64: ${{ secrets.WZYP_SIGNING_KEYSTORE_B64 }}
+          WZYP_SIGNING_PASSWORD: ${{ secrets.WZYP_SIGNING_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${WZYP_SIGNING_KEYSTORE_B64}" || -z "${WZYP_SIGNING_PASSWORD}" ]]; then
+            echo "::error::Stable signing secrets missing. Read android-app/SIGNING.md; refusing to produce another incompatible APK."
+            exit 1
+          fi
+          KEYSTORE_PATH="${RUNNER_TEMP}/wzyp-release.p12"
+          printf '%s' "${WZYP_SIGNING_KEYSTORE_B64}" | base64 --decode > "${KEYSTORE_PATH}"
+          chmod 600 "${KEYSTORE_PATH}"
+          test -s "${KEYSTORE_PATH}"
+          echo "WZYP_SIGNING_KEYSTORE_PATH=${KEYSTORE_PATH}" >> "$GITHUB_ENV"
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -54,15 +70,26 @@ jobs:
         run: python3 tools/enable_delta_sync_ui.py
       - name: Add public shop refresh UI
         run: python3 tools/enable_public_shop_ui.py
-      - name: Assemble debug APK
-        run: gradle -p android-app --no-daemon --stacktrace assembleDebug
+      - name: Assemble persistently signed release APK
+        env:
+          WZYP_SIGNING_PASSWORD: ${{ secrets.WZYP_SIGNING_PASSWORD }}
+        run: gradle -p android-app --no-daemon --stacktrace assembleRelease
       - name: Verify APK and package
         shell: bash
         run: |
           set -euo pipefail
-          APK=android-app/app/build/outputs/apk/debug/app-debug.apk
+          APK=android-app/app/build/outputs/apk/release/app-release.apk
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          # Reject a misconfigured/replaced key before publishing a non-upgradeable APK.
+          ACTUAL_FINGERPRINT="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" \
+            | sed -n 's/.*Signer #1 certificate SHA-256 digest: //p' | head -n1 \
+            | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')"
+          if [[ "$ACTUAL_FINGERPRINT" != "d1547a5aaea202c1811b47590bf8d6cc8a5dfaa7de0b79a29878c470d4914be8" ]]; then
+            echo "::error::Signing certificate fingerprint mismatch; refusing to publish."
+            exit 1
+          fi
+          echo "Verified stable signer: $ACTUAL_FINGERPRINT"
           # Explicit network permission: only used by user-configured native AI API.
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions "$APK" | grep -F 'android.permission.INTERNET'
           if "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions "$APK" | grep -F 'android.permission.ACCESS_NETWORK_STATE'; then
@@ -72,12 +99,12 @@ jobs:
           unzip -l "$APK" | grep -q 'assets/seed.db'
           unzip -l "$APK" | grep -q 'assets/index.html'
           mkdir -p dist
-          cp "$APK" dist/wzyp-view-android-v7.0.0-faster-sync-debug.apk
+          cp "$APK" dist/wzyp-view-android-v8.0.0-stable-signed.apk
           sha256sum dist/*.apk | tee dist/SHA256SUMS.txt
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: wzyp-view-android-debug
+          name: wzyp-view-android-stable-release
           path: dist/
           retention-days: 90
           if-no-files-found: error
@@ -89,6 +116,6 @@ jobs:
           TAG: android-build-${{ github.run_number }}
         shell: bash
         run: |
-          gh release create "$TAG" dist/wzyp-view-android-v7.0.0-faster-sync-debug.apk dist/SHA256SUMS.txt \
-            --title "Android v7.0.0 Faster Sync · Build ${{ github.run_number }}" \
-            --notes "Android v7: 2 worker category reads, global 1 request/s start pacing, bulk SQLite comparison and timing metrics. Offline DB / delta import / user-configured AI API preserved. The public API may return HTML/WAF challenges; this build does not bypass them."
+          gh release create "$TAG" dist/wzyp-view-android-v8.0.0-stable-signed.apk dist/SHA256SUMS.txt \
+            --title "Android v8.0.0 Stable Signed · Build ${{ github.run_number }}" \
+            --notes "Android v8 stable release signature pinned to SHA256 d1547a5aaea202c1811b47590bf8d6cc8a5dfaa7de0b79a29878c470d4914be8. Keeps v7 sync optimization, offline SQLite, AI API and optional background checks. v1-v7 CI-debug-signed APKs cannot be upgraded in place without the original private key. Back up, uninstall old, install this one ONCE; future signed releases can upgrade normally."
