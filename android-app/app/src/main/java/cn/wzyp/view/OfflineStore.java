@@ -175,6 +175,114 @@ public final class OfflineStore {
     }
 
 
+
+    /** Existing-storefront token selection: only public shop tokens already in the local DB. */
+    public synchronized JSONArray publicShopTokens(int offset,int limit) {
+        JSONArray tokens=new JSONArray();
+        try(Cursor cursor=db.rawQuery(
+            "SELECT token FROM wzyp_shops WHERE token IS NOT NULL AND token!='' "+
+            "ORDER BY token LIMIT ? OFFSET ?",
+            new String[]{String.valueOf(Math.min(20,Math.max(1,limit))),String.valueOf(Math.max(0,offset))})) {
+            while(cursor.moveToNext())tokens.put(cursor.getString(0));
+        }
+        return tokens;
+    }
+
+    /** Merge one successfully fetched storefront, without deleting unseen historical goods. */
+    public synchronized JSONObject mergePublicShop(String token,JSONArray goods) throws Exception {
+        if(token==null||!token.matches("[A-Za-z0-9_-]{3,80}"))
+            throw new Exception("非法店铺 token");
+        if(goods==null||goods.length()>1600)throw new Exception("店铺商品过多");
+        synchronized(OfflineStore.class) {
+            db.close();
+            SQLiteDatabase writable=null;
+            boolean committed=false;
+            int added=0,modified=0,unchanged=0;
+            try {
+                writable=SQLiteDatabase.openDatabase(dbPath.toString(),null,SQLiteDatabase.OPEN_READWRITE);
+                writable.beginTransaction();
+                try(Cursor shop=writable.rawQuery(
+                    "SELECT token FROM wzyp_shops WHERE token=?",new String[]{token})) {
+                    if(!shop.moveToFirst())throw new Exception("店铺不在内置数据库，请先导入含该店铺的完整数据库");
+                }
+                long nextId=1;
+                try(Cursor id=writable.rawQuery(
+                    "SELECT COALESCE(MAX(CAST(id AS INTEGER)),0)+1 FROM wzyp_goods",null)){
+                    if(id.moveToFirst())nextId=id.getLong(0);
+                }
+                java.util.HashSet<String> seen=new java.util.HashSet<>();
+                for(int i=0;i<goods.length();i++){
+                    JSONObject row=goods.optJSONObject(i);
+                    if(row==null)throw new Exception("商品格式错误");
+                    String key=row.optString("goods_key","");
+                    if(!key.matches("[A-Za-z0-9_-]{3,80}")||!seen.add(key))
+                        throw new Exception("商品 Key 无效或重复");
+                    String name=row.optString("name","").trim();
+                    String type=row.optString("goods_type","card");
+                    if(name.isEmpty() || name.length()>600 || !Arrays.asList(
+                       "card","article","resource","equity").contains(type))
+                        throw new Exception("商品名称或类型异常");
+                    double price=row.optDouble("price",Double.NaN);
+                    if(!Double.isFinite(price)||price<0||price>9999999)
+                        throw new Exception("商品价格异常");
+                    Object market=row.opt("market_price");
+                    String status=row.optString("status","1");
+                    String link="https://wzyp.cn/item/"+key;
+                    JSONObject raw=new JSONObject();
+                    put(raw,"source","public-storefront");
+                    put(raw,"fetched_at",System.currentTimeMillis());
+                    put(raw,"goods_key",key);
+                    put(raw,"goods_type",type);
+                    put(raw,"name",name);
+                    put(raw,"price",price);
+                    String marketText=market==null||market==JSONObject.NULL?"":String.valueOf(market);
+                    boolean exists=false,changed=false;
+                    try(Cursor old=writable.rawQuery(
+                        "SELECT name,price,market_price,status,goods_type FROM wzyp_goods "+
+                        "WHERE goods_key=? LIMIT 1",new String[]{key})){
+                        if(old.moveToFirst()){
+                            exists=true;
+                            changed=!name.equals(old.getString(0)) || price!=old.getDouble(1) ||
+                                !marketText.equals(old.isNull(2)?"":old.getString(2)) ||
+                                !status.equals(old.isNull(3)?"":old.getString(3)) ||
+                                !type.equals(old.isNull(4)?"":old.getString(4));
+                        }
+                    }
+                    if(exists && !changed){unchanged++;continue;}
+                    if(exists){
+                        writable.execSQL("UPDATE wzyp_goods SET name=?,price=?,market_price=?,status=?,"+
+                            "goods_type=?,link=?,raw_json=? WHERE goods_key=?",
+                            new Object[]{name,price,marketText,status,type,link,raw.toString(),key});
+                        modified++;
+                    }else{
+                        writable.execSQL("INSERT INTO wzyp_goods ("+
+                            "id,goods_key,shop_token,goods_type,name,price,market_price,status,link,raw_json) "+
+                            "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                            new Object[]{nextId++,key,token,type,name,price,marketText,status,link,raw.toString()});
+                        added++;
+                    }
+                }
+                writable.execSQL("UPDATE wzyp_shops SET goods_count=("+
+                    "SELECT COUNT(*) FROM wzyp_goods WHERE shop_token=?),fetch_done=1 WHERE token=?",
+                    new Object[]{token,token});
+                writable.setTransactionSuccessful();
+                committed=true;
+                JSONObject result=new JSONObject();
+                put(result,"shop_token",token);put(result,"added",added);
+                put(result,"modified",modified);put(result,"unchanged",unchanged);
+                put(result,"seen",goods.length());
+                return result;
+            }finally {
+                if(writable!=null){
+                    if(writable.inTransaction())writable.endTransaction();
+                    writable.close();
+                }
+                db=SQLiteDatabase.openDatabase(dbPath.toString(),null,SQLiteDatabase.OPEN_READONLY);
+                if(committed){statsCache=null;statsRevision=null;}
+            }
+        }
+    }
+
     /** Apply a versioned JSON delta in a single SQLite transaction. Model-generated SQL is never accepted. */
     public synchronized JSONObject applyDelta(JSONObject feed) throws Exception {
         synchronized (OfflineStore.class) {
