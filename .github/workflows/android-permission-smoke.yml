@@ -1,0 +1,67 @@
+name: Android permission and debug compile smoke test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'android-app/**'
+      - 'tools/**'
+      - '.github/workflows/android-permission-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Android 35
+        run: |
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -path '*/bin/sdkmanager' | sort -V | tail -n 1)"
+          test -n "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0"
+      - name: Gradle 8.11.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Unit tests
+        run: python3 -m unittest discover -s tests -p 'test_delta_feed.py' -v
+      - name: Generate bundled assets
+        run: |
+          python3 tools/build_offline_db.py
+          python3 tools/build_offline_web.py
+          python3 tools/enable_api_ui.py
+          python3 tools/enable_db_update_ui.py
+          python3 tools/enable_delta_sync_ui.py
+          python3 tools/enable_public_shop_ui.py
+      - name: Compile debug for testing only (do not release)
+        run: gradle -p android-app --no-daemon assembleDebug
+      - name: Assert permission and both scheduled services exist in built APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=android-app/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          "$AAPT" dump permissions "$APK" | tee /tmp/wzyp-manifest-permissions.txt
+          grep -F 'android.permission.INTERNET' /tmp/wzyp-manifest-permissions.txt
+          grep -F 'android.permission.ACCESS_NETWORK_STATE' /tmp/wzyp-manifest-permissions.txt
+          "$AAPT" dump xmltree "$APK" AndroidManifest.xml | tee /tmp/wzyp-manifest.txt
+          grep -F '.DeltaSyncJob' /tmp/wzyp-manifest.txt
+          grep -F '.PublicRefreshJob' /tmp/wzyp-manifest.txt
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify "$APK"
+          echo "Smoke check passed: correct permissions, job services and valid debug APK."
+          echo "This ephemeral debug signature must NOT be distributed as an upgrade."
