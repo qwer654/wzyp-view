@@ -178,7 +178,7 @@ assert generated_sections == original_sections, f"unbalanced sections: generated
 # Node.js is preinstalled on GitHub Actions. Fail the build for any invalid JS.
 import re
 import subprocess
-for i, snippet in enumerate(re.findall(r'<script(?:\\s[^>]*)?>(.*?)</script>', html, re.S | re.I)):
+for i, snippet in enumerate(re.findall(r'<script[^>]*>(.*?)</script>', html, re.S | re.I)):
     if snippet.strip():
         js_file = assets / f"inline-validation-{i}.js"
         try:
