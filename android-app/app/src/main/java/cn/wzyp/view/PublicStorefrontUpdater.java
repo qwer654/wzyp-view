@@ -14,6 +14,13 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import android.os.SystemClock;
 
 /**
  * Direct read-only public storefront refresh for shops already present in offline SQLite.
@@ -26,7 +33,11 @@ public final class PublicStorefrontUpdater {
     private static final int MAX_PAGES_PER_TYPE=6;
     private static final int PAGE_SIZE=50;
     private static final int MAX_BODY=2*1024*1024;
-    private static final long REQUEST_GAP_MS=1300;
+    // Shared conservative pacing across foreground and background requests.
+    // Two requests may be in flight, but starts are separated by at least 1 second.
+    private static final long REQUEST_GAP_MS=1000;
+    private static final Object PACE_LOCK=new Object();
+    private static long nextStart=0;
     private static final String PREFS="wzyp_public_sync_v6";
     private final Context context;
     private final OfflineStore store;
@@ -61,10 +72,15 @@ public final class PublicStorefrontUpdater {
         return result;
     }
 
-    private static void waitPaced(long prev) throws Exception {
-        if(prev<=0)return;
-        long delay=REQUEST_GAP_MS-(System.currentTimeMillis()-prev);
+    private static void waitPaced() throws InterruptedException {
+        long delay;
+        synchronized(PACE_LOCK){
+            long now=SystemClock.elapsedRealtime();
+            delay=Math.max(0,nextStart-now);
+            nextStart=Math.max(now,nextStart)+REQUEST_GAP_MS;
+        }
         if(delay>0)Thread.sleep(delay);
+        if(Thread.currentThread().isInterrupted())throw new InterruptedException("操作取消");
     }
 
     private JSONObject request(String token,String type,int page) throws Exception {
@@ -80,8 +96,8 @@ public final class PublicStorefrontUpdater {
         byte[] data=payload.toString().getBytes(StandardCharsets.UTF_8);
         HttpURLConnection connection=(HttpURLConnection)url.openConnection();
         connection.setInstanceFollowRedirects(false);
-        connection.setConnectTimeout(14000);
-        connection.setReadTimeout(25000);
+        connection.setConnectTimeout(10000);
+        connection.setReadTimeout(18000);
         connection.setUseCaches(false);
         connection.setRequestMethod("POST");
         connection.setDoOutput(true);
@@ -89,7 +105,7 @@ public final class PublicStorefrontUpdater {
         connection.setRequestProperty("Accept","application/json, text/plain, */*");
         connection.setRequestProperty("Referer","https://"+host+"/shop/"+token);
         connection.setRequestProperty("Origin","https://"+host);
-        connection.setRequestProperty("User-Agent","WzypView-Android/6.0");
+        connection.setRequestProperty("User-Agent","WzypView-Android/7.0");
         try {
             try(OutputStream output=connection.getOutputStream()){output.write(data);}
             int status=connection.getResponseCode();
@@ -171,49 +187,78 @@ public final class PublicStorefrontUpdater {
         return out;
     }
 
+    private static final class CategoryResult {
+        final HashMap<String,JSONObject> goods=new HashMap<>();
+        int calls;
+    }
+
+    /** Each worker handles pages of one product type. Shared pacing avoids bursts. */
+    private CategoryResult fetchCategory(String token,String type,Progress progress) throws Exception {
+        CategoryResult result=new CategoryResult();
+        for(int page=1;page<=MAX_PAGES_PER_TYPE;page++){
+            waitPaced();
+            if(progress!=null)progress.update("checking",
+                "读取 "+token+" / "+type+" / 第 "+page+" 页",null);
+            JSONObject answer=request(token,type,page);
+            result.calls++;
+            JSONArray rows=extractRows(answer);
+            for(int i=0;i<rows.length();i++){
+                JSONObject item=rows.optJSONObject(i);
+                if(item==null)throw new Exception("列表存在无效商品记录");
+                String key=goodsKey(item);
+                if(key.isEmpty())throw new Exception("无法识别商品 Key，拒绝更新");
+                result.goods.put(key,normalized(item,key,type));
+            }
+            int total=knownTotal(answer);
+            if(rows.length()==0 || rows.length()<PAGE_SIZE ||
+                (total>=0 && page*PAGE_SIZE>=total))break;
+            if(page==MAX_PAGES_PER_TYPE)
+                throw new Exception("店铺 "+token+" 的 "+type+" 超出 "+MAX_PAGES_PER_TYPE+
+                    " 页，为避免残缺数据已停止写入");
+        }
+        return result;
+    }
+
     /**
-     * Fetch all four types, bounded pages; incomplete one-store fetch NEVER commits.
-     * Old items not present in current catalog remain historical, not silently deleted.
+     * Two concurrent category fetchers hide network latency. Actual HTTP starts are
+     * globally paced at 1s. All four categories must complete before one DB merge.
      */
     public JSONObject refreshShop(String token,Progress progress) throws Exception {
         if(token==null||!token.matches("[A-Za-z0-9_-]{3,80}"))
             throw new Exception("店铺 Token 格式不正确");
-        HashMap<String,JSONObject> collected=new HashMap<>();
-        long lastRequest=0;
-        int calls=0;
-        for(String type:TYPES){
-            for(int page=1;page<=MAX_PAGES_PER_TYPE;page++){
-                waitPaced(lastRequest);
-                if(progress!=null)progress.update("checking",
-                    "读取 "+token+" / "+type+" / 第 "+page+" 页",null);
-                lastRequest=System.currentTimeMillis();
-                JSONObject payload=request(token,type,page);
-                calls++;
-                JSONArray rows=extractRows(payload);
-                for(int i=0;i<rows.length();i++){
-                    JSONObject row=rows.optJSONObject(i);
-                    if(row==null)throw new Exception("平台列表记录格式错误");
-                    String key=goodsKey(row);
-                    if(key.isEmpty())throw new Exception("无法识别商品 Key，停止以避免数据错配");
-                    collected.put(key,normalized(row,key,type));
+        long started=SystemClock.elapsedRealtime();
+        ExecutorService pool=Executors.newFixedThreadPool(2);
+        List<Future<CategoryResult>> results=new ArrayList<>();
+        try {
+            for(String type:TYPES)
+                results.add(pool.submit(()->fetchCategory(token,type,progress)));
+            HashMap<String,JSONObject> combined=new HashMap<>();
+            int calls=0;
+            for(Future<CategoryResult> future:results){
+                CategoryResult part;
+                try { part=future.get(); }
+                catch(ExecutionException failure){
+                    Throwable cause=failure.getCause();
+                    throw new Exception(cause==null?"同步分类失败":cause.getMessage(),cause);
                 }
-                int count=knownTotal(payload);
-                if(rows.length()==0 || rows.length()<PAGE_SIZE ||
-                   count>=0 && page*PAGE_SIZE>=count)break;
-                if(page==MAX_PAGES_PER_TYPE)
-                    throw new Exception("店铺 "+token+" 的 "+type+" 超出 "+MAX_PAGES_PER_TYPE+
-                        " 页，已停止本次写入，避免只保存不完整列表");
+                combined.putAll(part.goods);
+                calls+=part.calls;
             }
+            JSONArray snapshot=new JSONArray();
+            for(JSONObject good:combined.values())snapshot.put(good);
+            JSONObject summary=store.mergePublicShop(token,snapshot);
+            put(summary,"requests",calls);
+            put(summary,"elapsed_ms",SystemClock.elapsedRealtime()-started);
+            if(progress!=null)progress.update("shop_done",
+                token+"：新增 "+summary.optInt("added")+"，修改 "+summary.optInt("modified")+
+                "，未变化 "+summary.optInt("unchanged")+"；耗时 "+
+                String.format(java.util.Locale.ROOT,"%.1f",summary.optLong("elapsed_ms")/1000.0)+" 秒",
+                summary);
+            return summary;
+        }finally {
+            for(Future<CategoryResult> item:results)if(!item.isDone())item.cancel(true);
+            pool.shutdownNow();
         }
-        JSONArray snapshot=new JSONArray();
-        for(JSONObject product:collected.values())snapshot.put(product);
-        JSONObject merged=store.mergePublicShop(token,snapshot);
-        put(merged,"requests",calls);
-        if(progress!=null)progress.update("shop_done",
-            token+"：新增 "+merged.optInt("added")+
-            "，价格/状态更新 "+merged.optInt("modified")+
-            "，未变化 "+merged.optInt("unchanged"),merged);
-        return merged;
     }
 
     /** Resume at last successful shop; stop immediately on errors / access challenges. */
@@ -227,13 +272,15 @@ public final class PublicStorefrontUpdater {
             tokens=store.publicShopTokens(0,limit);
         }
         if(tokens.length()==0)throw new Exception("本地数据库没有店铺 Token");
-        int changed=0,added=0,completed=0;
+        long started=SystemClock.elapsedRealtime();
+        int changed=0,added=0,completed=0,requestCount=0;
         for(int index=0;index<tokens.length();index++){
             String token=tokens.getString(index);
             try{
                 JSONObject result=refreshShop(token,progress);
                 added+=result.optInt("added");
                 changed+=result.optInt("modified");
+                requestCount+=result.optInt("requests");
                 completed++;
                 settings.edit().putInt("offset",offset+index+1)
                     .putLong("last_success",System.currentTimeMillis())
@@ -251,6 +298,8 @@ public final class PublicStorefrontUpdater {
         put(summary,"added",added);
         put(summary,"modified",changed);
         put(summary,"next_offset",offset+completed);
+        put(summary,"requests",requestCount);
+        put(summary,"elapsed_ms",SystemClock.elapsedRealtime()-started);
         return summary;
     }
 

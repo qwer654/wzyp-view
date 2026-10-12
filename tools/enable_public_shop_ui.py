@@ -15,7 +15,7 @@ html=html.replace(needle, """      <div class="card">
         <p style="font-size:13px;line-height:1.8">
           <b>无需自建数据库服务器：</b>尝试从链动小铺公开店铺商品列表接口，
           直接更新本机数据库里<b>已有店铺</b>的商品名、价格与上架状态。
-          一次最多刷新 8 家，自动保存下一个待更新位置。失败时保留旧数据。
+          同店最多两个分类并行读取、全局间隔至少 1 秒；一次最多刷新 8 家，自动保存进度。失败保留旧数据。
         </p>
         <div id="publicShopInfo" class="hint" style="line-height:1.8;white-space:pre-line;margin:8px 0"></div>
         <div class="form-row">
@@ -43,11 +43,12 @@ html=html.replace(needle, """      <div class="card">
           <button class="btn btn-ghost" onclick="refreshPublicShops(8)">刷新下一批 8 家</button>
           <button class="btn btn-ghost" onclick="savePublicAuto()">保存自动更新设置</button>
         </div>
+        <div class="hint" style="margin-top:10px">性能优化：最多 2 路请求同时在途，全局每秒至多开始 1 个请求；一次性对比同店旧商品，跳过无变化的数据库写入。</div>
         <div id="publicShopProgress" class="test-result" style="line-height:1.8;white-space:pre-line"></div>
         <p class="hint" style="line-height:1.8">接口若要求登录、验证码、返回 HTML 验证页面或限流，将提示并停止，不绕过验证。新店铺可通过粘贴链接添加，新商品可同步；未获取到的旧商品不会被误删。商品详情全文及新店铺发现需要单独接口。</p>
       </div>
 """ + needle,1)
-html=html.replace("v5.0.0","v6.0.0")
+html=html.replace("v5.0.0","v7.0.0").replace("v6.0.0","v7.0.0")
 script=r"""
 <script>
 function renderPublicInfo(){
@@ -102,11 +103,17 @@ window.__wzypDbUpdate=async message=>{
       if(message.details)
         node.textContent+=(message.details.added!==undefined?
            '\n新增 '+message.details.added+' / 修改 '+message.details.modified+
-           ' / 无变化 '+message.details.unchanged:'');
+           ' / 无变化 '+message.details.unchanged+
+           ' / 用时 '+(Number(message.details.elapsed_ms||0)/1000).toFixed(1)+' 秒':'');
     }
     if(message.stage==='public_done'||message.stage==='public_error'){
       $('#publicShopRefreshBtn').disabled=false;
       renderPublicInfo();
+      if(message.stage==='public_done' && message.details){
+        const d=message.details;
+        node.textContent='完成 '+d.shops+' 家 / '+d.requests+' 次接口请求 / 用时 '+
+          (Number(d.elapsed_ms||0)/1000).toFixed(1)+' 秒；新增 '+d.added+'、修改 '+d.modified;
+      }
       if(message.stage==='public_done' && _v5DbEvent)
         await _v5DbEvent({stage:'done',percent:100,message:'公开店铺商品已刷新',details:message.details||null});
     }
