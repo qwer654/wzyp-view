@@ -266,6 +266,15 @@ th.num{text-align:right}
   .stat-card .value { font-size:19px }
 }
 
+
+.chat-mobile-tools { display:none }
+@media (max-width:700px) {
+  .chat-mobile-tools { display:flex; gap:8px; align-items:center; padding:6px 10px; background:#fff; border-bottom:1px solid var(--line); flex-shrink:0 }
+  .chat-mobile-tools button { min-height:36px; flex:1; justify-content:center }
+  .chat-wrap { position:relative }
+  .chat-side.mobile-open { display:flex; position:absolute; top:0; bottom:0; left:0; z-index:30; width:min(80vw,280px); box-shadow:8px 0 32px rgba(0,0,0,.18); background:#fff }
+}
+
 </style>
 </head>
 <body>
@@ -390,6 +399,11 @@ th.num{text-align:right}
 
   <!-- ============ 聊天 ============ -->
   <section class="page" id="page-chat">
+  <div class="chat-mobile-tools">
+    <button class="btn btn-primary" onclick="newThread()">＋ 新对话</button>
+    <button class="btn btn-ghost" onclick="toggleMobileThreads()">☰ 会话列表</button>
+  </div>
+  
     <div class="chat-wrap">
       <aside class="chat-side">
         <button class="btn btn-primary new-chat" onclick="newThread()">＋ 新对话</button>
@@ -1131,6 +1145,18 @@ $('#chatInput').addEventListener('input',function(){
 });
 ['shopKw','gKw'].forEach(id=>$('#'+id).addEventListener('keydown',e=>{if(e.key==='Enter')$('#'+(id==='shopKw'?'shopKw':'gKw'))&& (id==='shopKw'?loadShops(1):loadGoods(1))}));
 loadDashboard();loadSettings();refreshLlmBadge();
+</script>
+<script>
+function toggleMobileThreads() {
+  const side = document.querySelector('.chat-side');
+  if (side) side.classList.toggle('mobile-open');
+}
+document.addEventListener('click', function(event) {
+  if (event.target.closest('#threadList .thread') && !event.target.closest('.t-del')) {
+    const side = document.querySelector('.chat-side');
+    if (side) side.classList.remove('mobile-open');
+  }
+}, true);
 </script>
 </body>
 </html>
