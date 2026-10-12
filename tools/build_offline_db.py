@@ -10,6 +10,7 @@ import os
 import re
 import sqlite3
 import urllib.request
+import time
 import zipfile
 from pathlib import Path
 
@@ -161,9 +162,25 @@ def main():
     archive = Path(os.environ.get("WZYP_DATA_ZIP", "/tmp/wzyp-data.zip"))
     if not archive.is_file():
         print("Fetching pinned upstream release data for APK (build machine only)")
-        with urllib.request.urlopen(UPSTREAM_ARCHIVE, timeout=90) as response, archive.open("wb") as dest:
-            while data := response.read(1024 * 1024):
-                dest.write(data)
+        last_error = None
+        for attempt in range(1, 5):
+            partial = archive.with_suffix(".download")
+            try:
+                with urllib.request.urlopen(UPSTREAM_ARCHIVE, timeout=120) as response, partial.open("wb") as dest:
+                    while data := response.read(1024 * 1024):
+                        dest.write(data)
+                if partial.stat().st_size < 100_000:
+                    raise ValueError("Unexpectedly short historical SQLite source archive")
+                partial.replace(archive)
+                break
+            except (OSError, ValueError) as exc:
+                last_error = exc
+                partial.unlink(missing_ok=True)
+                print(f"Source archive download attempt {attempt}/4 failed: {exc}", flush=True)
+                if attempt < 4:
+                    time.sleep(4 * attempt)
+        if not archive.is_file():
+            raise RuntimeError("Cannot fetch pinned historical dataset archive after retries") from last_error
     if archive.stat().st_size > 80 * 1024 * 1024:
         raise ValueError("unexpected archive size")
     if output.exists(): output.unlink()
