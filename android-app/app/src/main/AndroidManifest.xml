@@ -5,7 +5,7 @@
     <application
         android:allowBackup="false"
         android:usesCleartextTraffic="true"
-        android:label="链动小铺洞察"
+        android:label="链动小铺离线版"
         android:icon="@drawable/ic_app"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity android:name=".MainActivity"
