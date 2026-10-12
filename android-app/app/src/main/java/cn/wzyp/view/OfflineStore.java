@@ -54,6 +54,10 @@ public final class OfflineStore {
         context = ctx.getApplicationContext();
         dbPath = context.getDatabasePath("wzyp_snapshot_v1.db");
         File dir = dbPath.getParentFile();
+        // Recover the prior database if the OS killed the app during an atomic swap.
+        File pendingBackup=new File(dbPath.getAbsolutePath()+".backup");
+        if(!dbPath.isFile() && pendingBackup.isFile() && !pendingBackup.renameTo(dbPath))
+            throw new IllegalStateException("恢复上一次数据库备份失败");
         if (dir != null && !dir.exists() && !dir.mkdirs()) {
             throw new IllegalStateException("无法建立本地数据目录");
         }
