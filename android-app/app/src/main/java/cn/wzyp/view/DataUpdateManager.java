@@ -75,6 +75,15 @@ public final class DataUpdateManager {
     }
 
     @JavascriptInterface
+    public String publicShopSetHost(String selectedHost) {
+        if(!"wzyp.cn".equals(selectedHost)&&!"pay.ldxp.cn".equals(selectedHost))
+            return put(new JSONObject(),"_error","仅支持两个明确的链动小铺公开域名").toString();
+        activity.getSharedPreferences("wzyp_public_sync_v6",0)
+            .edit().putString("host",selectedHost).apply();
+        return publicShopSettings();
+    }
+
+    @JavascriptInterface
     public String publicShopSetAuto(boolean enabled) {
         try {
             activity.getSharedPreferences("wzyp_public_sync_v6",0)
