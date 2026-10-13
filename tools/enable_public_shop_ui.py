@@ -49,7 +49,7 @@ html=html.replace(needle, """      <div class="card">
         <p class="hint" style="line-height:1.8">接口若要求登录、验证码、返回 HTML 验证页面或限流，将提示并停止，不绕过验证。新店铺可通过粘贴链接添加，新商品可同步；未获取到的旧商品不会被误删。商品详情全文及新店铺发现需要单独接口。</p>
       </div>
 """ + needle,1)
-html=html.replace("v5.0.0","v7.0.0").replace("v6.0.0","v7.0.0")
+html=html.replace("v5.0.0","v8.0.2").replace("v6.0.0","v8.0.2").replace("v7.0.0","v8.0.2")
 script=r"""
 <script>
 function renderPublicInfo(){
