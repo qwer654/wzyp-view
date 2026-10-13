@@ -103,6 +103,15 @@ public final class DataUpdateManager {
         }
     }
 
+    /** Cancel a running public refresh immediately; queued tasks retain SQLite integrity. */
+    @JavascriptInterface
+    public void publicShopCancel() {
+        if(working.get()){
+            storefront.cancel();
+            notifyJs("public_checking","已请求取消，正在停止网络请求…",-1,null);
+        }
+    }
+
     @JavascriptInterface
     public void publicShopRefresh(String target,int count) {
         if(!working.compareAndSet(false,true)){
@@ -111,6 +120,7 @@ public final class DataUpdateManager {
         }
         io.execute(()->{
             try {
+                storefront.prepareNextRun();
                 PublicStorefrontUpdater.Progress progress=(stage,message,details)->
                     notifyJs("public_"+stage,message,-1,details);
                 JSONObject result;
