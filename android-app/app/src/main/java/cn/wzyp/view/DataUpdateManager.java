@@ -79,8 +79,12 @@ public final class DataUpdateManager {
     public String publicShopSetHost(String selectedHost) {
         if(!"wzyp.cn".equals(selectedHost)&&!"pay.ldxp.cn".equals(selectedHost))
             return put(new JSONObject(),"_error","仅支持两个明确的链动小铺公开域名").toString();
-        activity.getSharedPreferences("wzyp_public_sync_v6",0)
-            .edit().putString("host",selectedHost).apply();
+        android.content.SharedPreferences settings=
+            activity.getSharedPreferences("wzyp_public_sync_v6",0);
+        boolean hostChanged=!selectedHost.equals(settings.getString("host","wzyp.cn"));
+        android.content.SharedPreferences.Editor edit=settings.edit().putString("host",selectedHost);
+        if(hostChanged)edit.remove("hold_until_ms").remove("error_kind");
+        edit.apply();
         return publicShopSettings();
     }
 
@@ -101,6 +105,17 @@ public final class DataUpdateManager {
             if(reason.contains("ACCESS_NETWORK_STATE"))
                 reason="当前安装版本缺少系统网络状态权限，请安装修复版 APK";
             return put(new JSONObject(),"_error","自动更新设置未生效："+reason).toString();
+        }
+    }
+
+    @JavascriptInterface
+    public String publicShopSkip() {
+        if(working.get())
+            return put(new JSONObject(),"_error","请先停止当前同步，再跳过店铺").toString();
+        try {
+            return storefront.skipCurrentShop().toString();
+        } catch(Exception e){
+            return put(new JSONObject(),"_error","跳过店铺失败："+e.getMessage()).toString();
         }
     }
 
