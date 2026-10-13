@@ -207,8 +207,6 @@ public final class PublicStorefrontUpdater {
             catch(org.json.JSONException malformed) {
                 throw blockedResponse(host,status,"接口 "+host+" 返回无法解析的非 JSON 数据");
             }
-            prefs().edit().putString("error_kind","")
-                .putLong("hold_until_ms",0).apply();
             if(response.optInt("code",-1)!=1)
                 throw new Exception("平台接口错误："+response.optString("msg","状态异常").substring(
                     0,Math.min(100,response.optString("msg","状态异常").length())));
@@ -339,6 +337,8 @@ public final class PublicStorefrontUpdater {
             for(JSONObject good:combined.values())snapshot.put(good);
             requireActive();
             JSONObject summary=store.mergePublicShop(token,snapshot);
+            prefs().edit().putString("error_kind","")
+                .putLong("hold_until_ms",0).apply();
             put(summary,"requests",calls);
             put(summary,"elapsed_ms",SystemClock.elapsedRealtime()-started);
             if(progress!=null)progress.update("shop_done",
