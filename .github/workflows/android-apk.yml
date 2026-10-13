@@ -81,6 +81,8 @@ jobs:
           APK=android-app/app/build/outputs/apk/release/app-release.apk
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          # Verify this is the upgradeable main application, not the separate QA build.
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "package: name='cn.wzyp.view' versionCode='9' versionName='8.0.1'"
           # Reject a misconfigured/replaced key before publishing a non-upgradeable APK.
           ACTUAL_FINGERPRINT="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" \
             | sed -n 's/.*Signer #1 certificate SHA-256 digest: //p' | head -n1 \
