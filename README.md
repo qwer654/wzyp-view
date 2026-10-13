@@ -31,7 +31,7 @@
 
 ![设置页](docs/screenshot-settings.png)
 
-## 📱 Android v8.0.3 · 修复自动更新权限 + 固定发布签名 + 加速公开店铺刷新 + 离线数据库 + AI API
+## 📱 Android v8.0.4 · 修复自动更新权限 + 固定发布签名 + 加速公开店铺刷新 + 离线数据库 + AI API
 
 - [Android APK 下载](../../releases) · [GitHub Actions 构建](../../actions/workflows/android-apk.yml)
 - [详细配置和构建指南](android-app/README.md)
@@ -44,7 +44,7 @@
 - **注意：** 在线 AI 需要网络；原生 Anthropic/Gemini 等非 OpenAI 兼容协议需网关适配。历史快照不可当作实时商品数据。
 
 
-**v8.0.3 修复：** 新增公开接口 HTTP/内容类型诊断、12 小时后台冷却和手工跳过失效店铺；此前版本已为 JobScheduler 的联网约束补齐 `ACCESS_NETWORK_STATE` 系统普通权限，同时更新 CI 自动验证与同步失败提示。GitHub 固定签名已配置并通过构建验证；升级版沿用相同的固定证书。
+**v8.0.4 修复：** 新增公开接口 HTTP/内容类型诊断、12 小时后台冷却和手工跳过失效店铺；此前版本已为 JobScheduler 的联网约束补齐 `ACCESS_NETWORK_STATE` 系统普通权限，同时更新 CI 自动验证与同步失败提示。GitHub 固定签名已配置并通过构建验证；升级版沿用相同的固定证书。
 
 ## 🔐 Android v8 固定签名升级
 

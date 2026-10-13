@@ -48,6 +48,9 @@ public final class PublicStorefrontUpdater {
     private final Context context;
     private final OfflineStore store;
     private volatile boolean cancelled=false;
+    // One HTML/challenge response invalidates all in-flight category reads for this
+    // shop. Keeping its cause avoids displaying a misleading generic cancel error.
+    private volatile String sourceFailure="";
     private final Set<HttpURLConnection> activeConnections=
         Collections.newSetFromMap(new ConcurrentHashMap<HttpURLConnection,Boolean>());
 
@@ -58,9 +61,11 @@ public final class PublicStorefrontUpdater {
     }
 
     /** Reset only when beginning a completely new foreground task. */
-    public void prepareNextRun(){cancelled=false;}
+    public void prepareNextRun(){cancelled=false;sourceFailure="";}
 
     private void requireActive() throws InterruptedException {
+        if(!sourceFailure.isEmpty())
+            throw new InterruptedException(sourceFailure);
         if(cancelled || Thread.currentThread().isInterrupted())
             throw new InterruptedException("同步已取消，未完成的店铺不会写入数据库");
     }
@@ -113,6 +118,9 @@ public final class PublicStorefrontUpdater {
     }
 
     private Exception blockedResponse(String host,int status,String description) {
+        // Stop queued pages immediately; never continue with the other 3 categories
+        // once the source indicates HTML/WAF instead of a usable JSON API.
+        sourceFailure=description;
         long now=System.currentTimeMillis();
         prefs().edit().putString("error_kind","source_unavailable")
             .putLong("hold_until_ms",now+SOURCE_COOLDOWN_MS)
@@ -314,6 +322,7 @@ public final class PublicStorefrontUpdater {
         if(token==null||!token.matches("[A-Za-z0-9_-]{3,80}"))
             throw new Exception("店铺 Token 格式不正确");
         requireActive();
+        sourceFailure="";
         long started=SystemClock.elapsedRealtime();
         ExecutorService pool=Executors.newFixedThreadPool(2);
         List<Future<CategoryResult>> results=new ArrayList<>();
