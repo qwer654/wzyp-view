@@ -19,6 +19,7 @@ html=html.replace(needle, """      <div class="card">
         </p>
         <div id="publicShopInfo" class="hint" style="line-height:1.8;white-space:pre-line;margin:8px 0"></div>
         <div id="publicShopHealth" class="hint" style="line-height:1.8;white-space:pre-line;margin:8px 0"></div>
+        <div id="publicJobsHealth" class="hint" style="line-height:1.8;white-space:pre-line;margin:8px 0"></div>
         <div class="form-row">
           <label>公开站点域名（手动选择，不自动绕过平台验证）</label>
           <select id="publicShopHost" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--line)">
@@ -75,6 +76,13 @@ function renderPublicInfo(){
       (cooldown>Date.now() ? '\n后台已暂停重试至 '+new Date(cooldown).toLocaleString('zh-CN')+
         '（不影响手动检查及离线查询）':'');
     status.style.color=info.last_error_kind ? '#b45309' : 'var(--sub)';
+    const jobs=JSON.parse(window.WzypData.syncHealth());
+    const statusText=b=>b?'已注册':'未注册';
+    $('#publicJobsHealth').textContent=
+      '系统网络权限：'+(jobs.network_permission?'正常':'缺失')+
+      ' · 每日店铺更新任务：'+statusText(jobs.public_scheduled)+
+      ' · 增量更新任务：'+statusText(jobs.delta_scheduled)+
+      '\n注：未开启的自动任务显示“未注册”是正常现象。';
   }catch(e){
     $('#publicShopInfo').textContent='读取公开刷新状态失败：'+e.message;
   }
