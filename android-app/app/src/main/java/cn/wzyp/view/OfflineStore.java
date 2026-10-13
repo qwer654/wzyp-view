@@ -30,6 +30,15 @@ import java.util.regex.Pattern;
 
 /** Bundled SQLite on-device backend. No sockets, remote services or remote LLM involved. */
 public final class OfflineStore {
+    // One SQLite owner per app process. Background jobs and WebView must share the
+    // same synchronized instance so a background merge invalidates visible statistics.
+    private static OfflineStore sharedInstance;
+
+    public static synchronized OfflineStore getInstance(Context context) throws Exception {
+        if(sharedInstance==null)sharedInstance=new OfflineStore(context.getApplicationContext());
+        return sharedInstance;
+    }
+
     private final Context context;
     private SQLiteDatabase db;
     private final File dbPath;
