@@ -18,6 +18,7 @@ public final class PublicRefreshJob extends JobService {
     public static final int JOB_ID=301006;
     private static final long PERIOD=24L*60*60*1000;
     private ExecutorService work;
+    private volatile PublicStorefrontUpdater activeUpdater;
     private volatile boolean stopped;
 
     static void schedule(Context context) {
@@ -46,12 +47,15 @@ public final class PublicRefreshJob extends JobService {
             try{
                 OfflineStore store=OfflineStore.getInstance(getApplicationContext());
                 // No background full-site harvesting: at most four known shops in one job.
-                new PublicStorefrontUpdater(getApplicationContext(),store)
-                    .refreshBatch(4,null);
+                PublicStorefrontUpdater updater=
+                    new PublicStorefrontUpdater(getApplicationContext(),store);
+                activeUpdater=updater;
+                if(!stopped)updater.refreshBatch(4,null);
             }catch(Exception e){
                 android.util.Log.w("WzypPublicSync","Shop refresh deferred: "+
                     e.getClass().getSimpleName());
             }finally{
+                activeUpdater=null;
                 if(!stopped)jobFinished(params,false);
             }
         });
@@ -60,6 +64,8 @@ public final class PublicRefreshJob extends JobService {
 
     @Override public boolean onStopJob(JobParameters params) {
         stopped=true;
+        PublicStorefrontUpdater updater=activeUpdater;
+        if(updater!=null)updater.cancel(); // Disconnect active HTTP and prevent late writes
         if(work!=null)work.shutdownNow();
         return false;
     }
