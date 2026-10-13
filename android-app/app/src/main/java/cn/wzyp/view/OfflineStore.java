@@ -14,6 +14,8 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.FileInputStream;
+import java.io.OutputStream;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -30,6 +32,15 @@ import java.util.regex.Pattern;
 
 /** Bundled SQLite on-device backend. No sockets, remote services or remote LLM involved. */
 public final class OfflineStore {
+    // One SQLite owner per app process. Background jobs and WebView must share the
+    // same synchronized instance so a background merge invalidates visible statistics.
+    private static OfflineStore sharedInstance;
+
+    public static synchronized OfflineStore getInstance(Context context) throws Exception {
+        if(sharedInstance==null)sharedInstance=new OfflineStore(context.getApplicationContext());
+        return sharedInstance;
+    }
+
     private final Context context;
     private SQLiteDatabase db;
     private final File dbPath;
@@ -116,6 +127,38 @@ public final class OfflineStore {
             throw failure;
         }
     }
+    }
+
+    /**
+     * Export a fully validated, consistent SQLite snapshot for user backup.
+     * The single shared OfflineStore monitor serializes this copy with all app
+     * background writers, preventing torn saves. WAL requires an explicit
+     * checkpoint; reject rather than silently dropping recent WAL data.
+     */
+    public synchronized JSONObject exportSnapshot(OutputStream destination) throws Exception {
+        if(destination==null)throw new Exception("导出位置不可写");
+        try(Cursor mode=db.rawQuery("PRAGMA journal_mode",null)){
+            if(!mode.moveToFirst() || "wal".equalsIgnoreCase(mode.getString(0)))
+                throw new Exception("当前数据库使用 WAL 模式，无法安全直接复制，请先重新导入完整数据库");
+        }
+        try(Cursor verify=db.rawQuery("PRAGMA quick_check",null)){
+            if(!verify.moveToFirst() || !"ok".equalsIgnoreCase(verify.getString(0)))
+                throw new Exception("数据库校验失败，拒绝导出损坏备份");
+        }
+        long total=0;
+        try(InputStream input=new FileInputStream(dbPath)){
+            byte[] buf=new byte[128*1024];int n;
+            while((n=input.read(buf))!=-1){
+                if(Thread.currentThread().isInterrupted())
+                    throw new InterruptedException("导出已中断");
+                destination.write(buf,0,n);
+                total+=n;
+            }
+            destination.flush();
+        }
+        JSONObject info=snapshotInfo();
+        put(info,"exported_bytes",total);
+        return info;
     }
 
     /** Validation occurs before closing the active database. */

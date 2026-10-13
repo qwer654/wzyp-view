@@ -109,6 +109,7 @@ public final class DeltaSyncEngine {
         String endpoint=prefs.getString("url","");
         if(endpoint.isEmpty())throw new Exception("未配置增量接口地址");
         URL url=validate(endpoint);
+        if(Thread.currentThread().isInterrupted())throw new InterruptedException("后台任务已停止");
         if(cb!=null)cb.onStatus("checking","正在检查增量数据…",null);
         HttpURLConnection conn=(HttpURLConnection)url.openConnection();
         conn.setInstanceFollowRedirects(false); // No leaking signed query URLs to a different host.
@@ -138,12 +139,14 @@ public final class DeltaSyncEngine {
             try(InputStream input=conn.getInputStream()) {
                 byte[] buf=new byte[16384];int count;
                 while((count=input.read(buf))!=-1) {
+                    if(Thread.currentThread().isInterrupted())throw new InterruptedException("后台同步中止");
                     if(output.size()+count>MAX_BYTES)throw new Exception("同步包超过 35 MB");
                     output.write(buf,0,count);
                 }
             }
             String json=new String(output.toByteArray(),StandardCharsets.UTF_8);
             JSONObject feed=new JSONObject(json);
+            if(Thread.currentThread().isInterrupted())throw new InterruptedException("后台同步中止，不写入数据库");
             if(cb!=null)cb.onStatus("applying","正在事务性更新手机 SQLite…",null);
             result=store.applyDelta(feed);
             String state=result.optString("status");

@@ -54,7 +54,7 @@ jobs:
         with:
           gradle-version: '8.11.1'
       - name: Test incremental feed generator
-        run: python3 -m unittest discover -s tests -p 'test_delta_feed.py' -v
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
       - name: Probe one public storefront page (non-blocking; no challenge bypass)
         continue-on-error: true
         run: python3 tools/probe_public_shop.py
@@ -82,7 +82,7 @@ jobs:
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
           # Verify this is the upgradeable main application, not the separate QA build.
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "package: name='cn.wzyp.view' versionCode='9' versionName='8.0.1'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "package: name='cn.wzyp.view' versionCode='10' versionName='8.0.2'"
           # Reject a misconfigured/replaced key before publishing a non-upgradeable APK.
           ACTUAL_FINGERPRINT="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" \
             | sed -n 's/.*Signer #1 certificate SHA-256 digest: //p' | head -n1 \
@@ -101,7 +101,7 @@ jobs:
           unzip -l "$APK" | grep -q 'assets/seed.db'
           unzip -l "$APK" | grep -q 'assets/index.html'
           mkdir -p dist
-          cp "$APK" dist/wzyp-view-android-v8.0.1-network-fix-stable.apk
+          cp "$APK" dist/wzyp-view-android-v8.0.2-data-sync-fix-stable.apk
           sha256sum dist/*.apk | tee dist/SHA256SUMS.txt
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
@@ -118,6 +118,6 @@ jobs:
           TAG: android-build-${{ github.run_number }}
         shell: bash
         run: |
-          gh release create "$TAG" dist/wzyp-view-android-v8.0.1-network-fix-stable.apk dist/SHA256SUMS.txt \
-            --title "Android v8.0.1 Network Permission Hotfix · Build ${{ github.run_number }}" \
-            --notes "Android v8.0.1 fixes JobScheduler ACCESS_NETWORK_STATE and pins stable release signature to SHA256 d1547a5aaea202c1811b47590bf8d6cc8a5dfaa7de0b79a29878c470d4914be8. Keeps v7 sync optimization, offline SQLite, AI API and optional background checks. v1-v7 CI-debug-signed APKs cannot be upgraded in place without the original private key. Back up, uninstall old, install this one ONCE; future signed releases can upgrade normally."
+          gh release create "$TAG" dist/wzyp-view-android-v8.0.2-data-sync-fix-stable.apk dist/SHA256SUMS.txt \
+            --title "Android v8.0.2 Reliable Data Sync Hotfix · Build ${{ github.run_number }}" \
+            --notes "Android v8.0.2 shares one SQLite backend for all jobs, supports cancellation and safe SQLite export, fixes data sync UI and retains JobScheduler ACCESS_NETWORK_STATE; pinned stable release signature to SHA256 d1547a5aaea202c1811b47590bf8d6cc8a5dfaa7de0b79a29878c470d4914be8. Keeps v7 sync optimization, offline SQLite, AI API and optional background checks. v1-v7 CI-debug-signed APKs cannot be upgraded in place without the original private key. Back up, uninstall old, install this one ONCE; future signed releases can upgrade normally."

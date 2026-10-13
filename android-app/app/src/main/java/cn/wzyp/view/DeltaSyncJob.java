@@ -15,7 +15,7 @@ public final class DeltaSyncJob extends JobService {
         executor=Executors.newSingleThreadExecutor();
         executor.execute(()->{
             try {
-                OfflineStore store=new OfflineStore(getApplicationContext());
+                OfflineStore store=OfflineStore.getInstance(getApplicationContext());
                 DeltaSyncEngine.sync(getApplicationContext(),store,null);
             }catch(Exception e) {
                 android.util.Log.w("WzypDeltaSync","Periodic sync did not complete: "+

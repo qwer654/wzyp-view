@@ -32,7 +32,7 @@ public final class MainActivity extends Activity {
         getWindow().setStatusBarColor(0xfff5f7fb);
         getWindow().getDecorView().setSystemUiVisibility(android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
         try {
-            OfflineStore store=new OfflineStore(this);
+            OfflineStore store=OfflineStore.getInstance(this);
             aiBridge=new AiBridge(this,store);
             dataManager=new DataUpdateManager(this,store);
             // These optional network jobs must NEVER prevent opening local offline data.
@@ -110,6 +110,10 @@ public final class MainActivity extends Activity {
         super.onActivityResult(req,result,data);
         if(req==DataUpdateManager.PICK_DATABASE && dataManager!=null) {
             dataManager.onFileResult(result,data);
+            return;
+        }
+        if(req==DataUpdateManager.EXPORT_DATABASE && dataManager!=null) {
+            dataManager.onExportResult(result,data);
             return;
         }
         if(req==FILE_REQUEST && fileCallback!=null){

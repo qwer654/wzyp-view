@@ -27,6 +27,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public final class DataUpdateManager {
     public static final int PICK_DATABASE=702;
+    public static final int EXPORT_DATABASE=703;
     private static final long MAX_BYTES=600L*1024L*1024L;
     private final Activity activity;
     private final OfflineStore store;
@@ -103,6 +104,15 @@ public final class DataUpdateManager {
         }
     }
 
+    /** Cancel a running public refresh immediately; queued tasks retain SQLite integrity. */
+    @JavascriptInterface
+    public void publicShopCancel() {
+        if(working.get()){
+            storefront.cancel();
+            notifyJs("public_checking","已请求取消，正在停止网络请求…",-1,null);
+        }
+    }
+
     @JavascriptInterface
     public void publicShopRefresh(String target,int count) {
         if(!working.compareAndSet(false,true)){
@@ -111,6 +121,7 @@ public final class DataUpdateManager {
         }
         io.execute(()->{
             try {
+                storefront.prepareNextRun();
                 PublicStorefrontUpdater.Progress progress=(stage,message,details)->
                     notifyJs("public_"+stage,message,-1,details);
                 JSONObject result;
@@ -159,6 +170,47 @@ public final class DataUpdateManager {
             }catch(Exception ignored){
                 // DeltaSyncEngine already relayed the exact error to the UI.
             }finally {
+                working.set(false);
+            }
+        });
+    }
+
+    @JavascriptInterface
+    public void exportFile() {
+        if(working.get()){
+            notifyJs("export_error","请等待正在执行的更新任务结束",0,null);
+            return;
+        }
+        activity.runOnUiThread(()->{
+            Intent picker=new Intent(Intent.ACTION_CREATE_DOCUMENT);
+            picker.addCategory(Intent.CATEGORY_OPENABLE);
+            picker.setType("application/octet-stream");
+            String filename="wzyp-backup-"+new java.text.SimpleDateFormat(
+                "yyyyMMdd-HHmmss",Locale.ROOT).format(new java.util.Date())+".db";
+            picker.putExtra(Intent.EXTRA_TITLE,filename);
+            try{activity.startActivityForResult(picker,EXPORT_DATABASE);}
+            catch(Exception e){notifyJs("export_error","无法打开文件保存器："+e.getMessage(),0,null);}
+        });
+    }
+
+    public void onExportResult(int result,Intent intent) {
+        if(result!=Activity.RESULT_OK || intent==null || intent.getData()==null)return;
+        final Uri destination=intent.getData();
+        if(!working.compareAndSet(false,true)){
+            notifyJs("export_error","已有数据库更新任务正在进行，请稍后重试",0,null);
+            return;
+        }
+        io.execute(()->{
+            try(OutputStream out=activity.getContentResolver().openOutputStream(destination,"w")){
+                if(out==null)throw new Exception("无法打开选定的保存位置");
+                notifyJs("export_progress","校验 SQLite 并保存到所选位置…",-1,null);
+                JSONObject info=store.exportSnapshot(out);
+                notifyJs("export_done","数据库已导出（"+
+                    String.format(Locale.ROOT,"%.1f",info.optLong("exported_bytes")/1048576.0)+
+                    " MB），请妥善保管备份文件",100,info);
+            }catch(Exception e){
+                notifyJs("export_error","导出失败："+e.getMessage()+"；若文件已创建请删除不完整文件",0,null);
+            }finally{
                 working.set(false);
             }
         });
