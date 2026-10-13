@@ -46,13 +46,19 @@ html=html.replace(needle, """      <div class="card">
           <button class="btn btn-ghost" onclick="cancelPublicShops()" id="publicShopCancel" disabled>取消本次刷新</button>
           <button class="btn btn-ghost" onclick="savePublicAuto()">保存自动更新设置</button>
           <button class="btn btn-ghost" onclick="skipPublicShop()">手动跳过当前店铺</button>
+          <button class="btn btn-ghost" onclick="viewPublicStorefront()">浏览器检查当前店铺</button>
         </div>
         <div class="hint" style="margin-top:10px">性能优化：最多 2 路请求同时在途，全局每秒至多开始 1 个请求；一次性对比同店旧商品，跳过无变化的数据库写入。</div>
+        <div class="hint" style="line-height:1.8;margin-top:6px">
+          如果 API 返回 HTTP 200 HTML，表示当前接口没有提供 JSON 数据，不代表数据库损坏。
+          浏览器按钮仅供查看店铺是否公开可访问；浏览器中的验证、登录不会自动传给本应用的更新接口。
+          平台没有开放可用 JSON 时，请使用下方 SQLite 导入或你有权限的数据同步服务。
+        </div>
         <div id="publicShopProgress" class="test-result" style="line-height:1.8;white-space:pre-line"></div>
         <p class="hint" style="line-height:1.8">公开商品源如返回 HTML/验证页，系统暂缓后台重试 12 小时，避免反复消耗流量。可手动选择其他公开域名后重试，或改用下方 SQLite/JSON 数据源；自动跳过验证不被支持。新店铺可通过粘贴链接添加，新商品可同步；未获取到的旧商品不会被误删。商品详情全文及新店铺发现需要单独接口。</p>
       </div>
 """ + needle,1)
-html=html.replace("v5.0.0","v8.0.3").replace("v6.0.0","v8.0.3").replace("v7.0.0","v8.0.3").replace("v8.0.2","v8.0.3")
+html=html.replace("v5.0.0","v8.0.4").replace("v6.0.0","v8.0.4").replace("v7.0.0","v8.0.4").replace("v8.0.2","v8.0.4").replace("v8.0.3","v8.0.4")
 script=r"""
 <script>
 function renderPublicInfo(){
@@ -86,6 +92,9 @@ function renderPublicInfo(){
   }catch(e){
     $('#publicShopInfo').textContent='读取公开刷新状态失败：'+e.message;
   }
+}
+function viewPublicStorefront(){
+  window.WzypData.viewPublicStorefront($('#publicShopTarget').value.trim());
 }
 function skipPublicShop(){
   if(!confirm('只跳过当前轮到的一个店铺，保留该店所有历史记录，确认？'))return;
