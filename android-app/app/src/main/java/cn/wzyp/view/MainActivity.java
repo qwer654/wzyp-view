@@ -112,6 +112,10 @@ public final class MainActivity extends Activity {
             dataManager.onFileResult(result,data);
             return;
         }
+        if(req==DataUpdateManager.EXPORT_DATABASE && dataManager!=null) {
+            dataManager.onExportResult(result,data);
+            return;
+        }
         if(req==FILE_REQUEST && fileCallback!=null){
             fileCallback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result,data));
             fileCallback=null;
