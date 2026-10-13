@@ -16,6 +16,7 @@ panel="""      <div class="card">
         <div class="form-actions" style="flex-wrap:wrap;margin-bottom:12px">
           <button class="btn btn-primary" id="pickDatabase" onclick="window.WzypData.chooseFile()">从手机导入 SQLite</button>
           <button class="btn btn-ghost" id="restoreDatabase" onclick="restoreDatabase()">恢复 APK 内置数据</button>
+          <button class="btn btn-ghost" id="exportDatabase" onclick="window.WzypData.exportFile()">导出当前 SQLite 备份</button>
         </div>
         <div class="form-row">
           <label>远程数据库文件地址（HTTPS）</label>
@@ -26,7 +27,8 @@ panel="""      <div class="card">
           <button class="btn btn-primary" id="syncDatabase" onclick="downloadDatabase()">下载并更新数据库</button>
         </div>
         <div id="snapshotResult" class="test-result" style="line-height:1.7"></div>
-        <p class="hint" style="line-height:1.7">更新前会检查文件完整性、店铺/商品/商品详情表及必要字段；不合格不会替换旧库。更新保留本地聊天和 API 设置。文件最大 600 MB，建议使用稳定 Wi-Fi。</p>
+        <div id="snapshotExportResult" class="test-result" style="line-height:1.7"></div>
+        <p class="hint" style="line-height:1.7">更新前会检查文件完整性、店铺/商品/商品详情表及必要字段；不合格不会替换旧库。更新保留本地聊天和 API 设置。文件最大 600 MB，建议使用稳定 Wi-Fi。卸载前请先导出当前数据库，备份新采集记录；聊天与 AI API 密钥需单独备份或重新配置。</p>
       </div>
 """
 html=html.replace(anchor,panel+anchor,1)
@@ -47,10 +49,18 @@ function refreshSnapshotInfo(){
   }catch(e){$('#snapshotInfo').textContent='读取数据状态失败：'+e.message;}
 }
 window.__wzypDbUpdate=async d=>{
+  if(d.stage && d.stage.startsWith('export_')){
+    const exportView=$('#snapshotExportResult');
+    if(exportView){
+      exportView.className='test-result '+(d.stage==='export_error'?'bad':'ok');
+      exportView.textContent=d.message||'';
+    }
+    return;
+  }
   const view=$('#snapshotResult');
   if(!view)return;
   const busy=['copying','validating'].includes(d.stage);
-  ['pickDatabase','restoreDatabase','syncDatabase'].forEach(id=>{
+  ['pickDatabase','restoreDatabase','syncDatabase','exportDatabase'].forEach(id=>{
     const btn=$('#'+id); if(btn)btn.disabled=busy;
   });
   view.className='test-result '+(d.stage==='error'?'bad':'ok');
