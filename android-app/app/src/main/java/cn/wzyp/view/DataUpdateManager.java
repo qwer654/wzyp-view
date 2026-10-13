@@ -129,6 +129,39 @@ public final class DataUpdateManager {
         }
     }
 
+    /** Open the selected public storefront in the user's own browser.
+     * Browser verification is NOT shared with the native API client.
+     */
+    @JavascriptInterface
+    public void viewPublicStorefront(String input) {
+        activity.runOnUiThread(()->{
+            try{
+                String token=input==null?"":input.trim();
+                if(token.startsWith("https://wzyp.cn/shop/"))
+                    token=token.substring("https://wzyp.cn/shop/".length());
+                else if(token.startsWith("https://pay.ldxp.cn/shop/"))
+                    token=token.substring("https://pay.ldxp.cn/shop/".length());
+                token=token.replaceAll("/+$","");
+                if(token.isEmpty()){
+                    org.json.JSONArray tokens=store.publicShopTokens(
+                        storefront.info().optInt("offset",0),1);
+                    if(tokens.length()>0)token=tokens.optString(0);
+                }
+                String host=storefront.info().optString("host","wzyp.cn");
+                if(!"wzyp.cn".equals(host)&&!"pay.ldxp.cn".equals(host))
+                    throw new Exception("不允许的域名");
+                if(!token.matches("[A-Za-z0-9_-]{3,80}"))
+                    throw new Exception("无法找到合法的店铺 Token");
+                android.content.Intent browse=new android.content.Intent(
+                    android.content.Intent.ACTION_VIEW,
+                    android.net.Uri.parse("https://"+host+"/shop/"+token));
+                activity.startActivity(browse);
+            }catch(Exception e){
+                notifyJs("public_error","浏览器打开失败："+e.getMessage(),0,null);
+            }
+        });
+    }
+
     @JavascriptInterface
     public String publicShopSkip() {
         if(working.get())
