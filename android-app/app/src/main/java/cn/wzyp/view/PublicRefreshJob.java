@@ -44,7 +44,7 @@ public final class PublicRefreshJob extends JobService {
         work=Executors.newSingleThreadExecutor();
         work.execute(()->{
             try{
-                OfflineStore store=new OfflineStore(getApplicationContext());
+                OfflineStore store=OfflineStore.getInstance(getApplicationContext());
                 // No background full-site harvesting: at most four known shops in one job.
                 new PublicStorefrontUpdater(getApplicationContext(),store)
                     .refreshBatch(4,null);
