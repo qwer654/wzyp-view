@@ -40,7 +40,8 @@ html=html.replace(needle, """      <div class="card">
         </div>
         <div class="form-actions" style="flex-wrap:wrap">
           <button class="btn btn-primary" onclick="refreshPublicShops(4)" id="publicShopRefreshBtn">立即刷新下一批 4 家</button>
-          <button class="btn btn-ghost" onclick="refreshPublicShops(8)">刷新下一批 8 家</button>
+          <button class="btn btn-ghost" onclick="refreshPublicShops(8)" id="publicShopRefresh8">刷新下一批 8 家</button>
+          <button class="btn btn-ghost" onclick="cancelPublicShops()" id="publicShopCancel" disabled>取消本次刷新</button>
           <button class="btn btn-ghost" onclick="savePublicAuto()">保存自动更新设置</button>
         </div>
         <div class="hint" style="margin-top:10px">性能优化：最多 2 路请求同时在途，全局每秒至多开始 1 个请求；一次性对比同店旧商品，跳过无变化的数据库写入。</div>
@@ -83,12 +84,22 @@ function savePublicAuto(){
   renderPublicInfo();
   return true;
 }
+let __publicShopChanged=0;
+function setPublicBusy(busy){
+  ['publicShopRefreshBtn','publicShopRefresh8'].forEach(id=>$('#'+id).disabled=busy);
+  $('#publicShopCancel').disabled=!busy;
+}
+function cancelPublicShops(){
+  window.WzypData.publicShopCancel();
+  $('#publicShopProgress').textContent='正在取消刷新并停止当前网络请求…';
+}
 function refreshPublicShops(limit){
   if(!savePublicAuto())return;
   const node=$('#publicShopProgress');
   node.className='test-result ok';
   node.textContent='正在请求公开店铺商品列表…';
-  $('#publicShopRefreshBtn').disabled=true;
+  setPublicBusy(true);
+  __publicShopChanged=0;
   const target=$('#publicShopTarget').value.trim();
   window.WzypData.publicShopRefresh(target,limit);
 }
@@ -99,6 +110,7 @@ window.__wzypDbUpdate=async message=>{
     node.className='test-result '+(message.stage==='public_error'?'bad':'ok');
     node.textContent=message.message||'';
     if(message.stage==='public_shop_done'){
+      __publicShopChanged++;
       renderPublicInfo();
       if(message.details)
         node.textContent+=(message.details.added!==undefined?
@@ -107,15 +119,22 @@ window.__wzypDbUpdate=async message=>{
            ' / 用时 '+(Number(message.details.elapsed_ms||0)/1000).toFixed(1)+' 秒':'');
     }
     if(message.stage==='public_done'||message.stage==='public_error'){
-      $('#publicShopRefreshBtn').disabled=false;
+      setPublicBusy(false);
       renderPublicInfo();
       if(message.stage==='public_done' && message.details){
         const d=message.details;
-        node.textContent='完成 '+d.shops+' 家 / '+d.requests+' 次接口请求 / 用时 '+
+        const count=d.shops===undefined?1:d.shops;
+        node.textContent='完成 '+count+' 家 / '+(d.requests||0)+' 次接口请求 / 用时 '+
           (Number(d.elapsed_ms||0)/1000).toFixed(1)+' 秒；新增 '+d.added+'、修改 '+d.modified;
       }
       if(message.stage==='public_done' && _v5DbEvent)
         await _v5DbEvent({stage:'done',percent:100,message:'公开店铺商品已刷新',details:message.details||null});
+      if(message.stage==='public_error' && __publicShopChanged>0){
+        // Previous shops were committed before a later shop failed. Refresh only
+        // the visible dashboard; never falsely report the entire batch succeeded.
+        try{await loadDashboard();}catch(e){}
+      }
+      __publicShopChanged=0;
     }
     return;
   }
