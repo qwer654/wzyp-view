@@ -13,6 +13,9 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Set;
+import java.util.Collections;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.ArrayList;
@@ -41,6 +44,20 @@ public final class PublicStorefrontUpdater {
     private static final String PREFS="wzyp_public_sync_v6";
     private final Context context;
     private final OfflineStore store;
+    private volatile boolean cancelled=false;
+    private final Set<HttpURLConnection> activeConnections=
+        Collections.newSetFromMap(new ConcurrentHashMap<HttpURLConnection,Boolean>());
+
+    /** Stop a foreground/background update safely before any more SQLite writes. */
+    public void cancel(){
+        cancelled=true;
+        for(HttpURLConnection connection:activeConnections)connection.disconnect();
+    }
+
+    private void requireActive() throws InterruptedException {
+        if(cancelled || Thread.currentThread().isInterrupted())
+            throw new InterruptedException("同步已取消，未完成的店铺不会写入数据库");
+    }
 
     public interface Progress { void update(String stage,String message,JSONObject info); }
 
@@ -84,6 +101,7 @@ public final class PublicStorefrontUpdater {
     }
 
     private JSONObject request(String token,String type,int page) throws Exception {
+        requireActive();
         String host=publicHost();
         URL url=new URL("https://"+host+"/shopApi/Shop/goodsList");
         JSONObject payload=new JSONObject();
@@ -95,6 +113,7 @@ public final class PublicStorefrontUpdater {
         put(payload,"pageSize",PAGE_SIZE);
         byte[] data=payload.toString().getBytes(StandardCharsets.UTF_8);
         HttpURLConnection connection=(HttpURLConnection)url.openConnection();
+        activeConnections.add(connection);
         connection.setInstanceFollowRedirects(false);
         connection.setConnectTimeout(10000);
         connection.setReadTimeout(18000);
@@ -130,7 +149,10 @@ public final class PublicStorefrontUpdater {
                 throw new Exception("平台接口错误："+response.optString("msg","状态异常").substring(
                     0,Math.min(100,response.optString("msg","状态异常").length())));
             return response;
-        }finally{connection.disconnect();}
+        }finally{
+            activeConnections.remove(connection);
+            connection.disconnect();
+        }
     }
 
     private static String goodsKey(JSONObject item) {
@@ -196,10 +218,13 @@ public final class PublicStorefrontUpdater {
     private CategoryResult fetchCategory(String token,String type,Progress progress) throws Exception {
         CategoryResult result=new CategoryResult();
         for(int page=1;page<=MAX_PAGES_PER_TYPE;page++){
+            requireActive();
             waitPaced();
+            requireActive();
             if(progress!=null)progress.update("checking",
                 "读取 "+token+" / "+type+" / 第 "+page+" 页",null);
             JSONObject answer=request(token,type,page);
+            requireActive();
             result.calls++;
             JSONArray rows=extractRows(answer);
             for(int i=0;i<rows.length();i++){
@@ -226,6 +251,7 @@ public final class PublicStorefrontUpdater {
     public JSONObject refreshShop(String token,Progress progress) throws Exception {
         if(token==null||!token.matches("[A-Za-z0-9_-]{3,80}"))
             throw new Exception("店铺 Token 格式不正确");
+        requireActive();
         long started=SystemClock.elapsedRealtime();
         ExecutorService pool=Executors.newFixedThreadPool(2);
         List<Future<CategoryResult>> results=new ArrayList<>();
@@ -244,8 +270,10 @@ public final class PublicStorefrontUpdater {
                 combined.putAll(part.goods);
                 calls+=part.calls;
             }
+            requireActive();
             JSONArray snapshot=new JSONArray();
             for(JSONObject good:combined.values())snapshot.put(good);
+            requireActive();
             JSONObject summary=store.mergePublicShop(token,snapshot);
             put(summary,"requests",calls);
             put(summary,"elapsed_ms",SystemClock.elapsedRealtime()-started);
@@ -263,6 +291,7 @@ public final class PublicStorefrontUpdater {
 
     /** Resume at last successful shop; stop immediately on errors / access challenges. */
     public JSONObject refreshBatch(int shopLimit,Progress progress) throws Exception {
+        requireActive();
         int limit=Math.min(8,Math.max(1,shopLimit));
         SharedPreferences settings=prefs();
         int offset=settings.getInt("offset",0);
@@ -275,6 +304,7 @@ public final class PublicStorefrontUpdater {
         long started=SystemClock.elapsedRealtime();
         int changed=0,added=0,completed=0,requestCount=0;
         for(int index=0;index<tokens.length();index++){
+            requireActive();
             String token=tokens.getString(index);
             try{
                 JSONObject result=refreshShop(token,progress);
@@ -304,6 +334,7 @@ public final class PublicStorefrontUpdater {
     }
 
     public JSONObject refreshOne(String token,Progress progress) throws Exception {
+        requireActive();
         JSONObject result=refreshShop(token,progress);
         prefs().edit().putLong("last_run",System.currentTimeMillis())
             .putLong("last_success",System.currentTimeMillis())
