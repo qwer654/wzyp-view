@@ -22,6 +22,9 @@ class TestPublicSourceGuardrails(unittest.TestCase):
         self.assertLess(src.index('contains("text/html")'),
                         src.index("store.mergePublicShop(token,snapshot)"))
         self.assertIn("requireActive();", src)
+        self.assertIn("sourceFailure=description;",src)
+        self.assertIn("if(!sourceFailure.isEmpty())",src)
+        self.assertIn("public void viewPublicStorefront(String input)",self.source("DataUpdateManager.java"))
 
     def test_background_cooldown_remains_optional(self):
         src = self.source("PublicRefreshJob.java")
@@ -45,8 +48,8 @@ class TestPublicSourceGuardrails(unittest.TestCase):
     def test_signed_version_and_permission(self):
         gradle=(ROOT/"android-app/app/build.gradle").read_text(encoding="utf-8")
         manifest=(ROOT/"android-app/app/src/main/AndroidManifest.xml").read_text(encoding="utf-8")
-        self.assertIn("versionCode 11",gradle)
-        self.assertIn("versionName '8.0.3'",gradle)
+        self.assertIn("versionCode 12",gradle)
+        self.assertIn("versionName '8.0.4'",gradle)
         self.assertIn('android.permission.ACCESS_NETWORK_STATE',manifest)
 
 
