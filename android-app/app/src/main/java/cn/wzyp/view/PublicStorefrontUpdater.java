@@ -54,6 +54,9 @@ public final class PublicStorefrontUpdater {
         for(HttpURLConnection connection:activeConnections)connection.disconnect();
     }
 
+    /** Reset only when beginning a completely new foreground task. */
+    public void prepareNextRun(){cancelled=false;}
+
     private void requireActive() throws InterruptedException {
         if(cancelled || Thread.currentThread().isInterrupted())
             throw new InterruptedException("同步已取消，未完成的店铺不会写入数据库");
