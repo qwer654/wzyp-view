@@ -18,6 +18,7 @@ html=html.replace(needle, """      <div class="card">
           同店最多两个分类并行读取、全局间隔至少 1 秒；一次最多刷新 8 家，自动保存进度。失败保留旧数据。
         </p>
         <div id="publicShopInfo" class="hint" style="line-height:1.8;white-space:pre-line;margin:8px 0"></div>
+        <div id="publicShopHealth" class="hint" style="line-height:1.8;white-space:pre-line;margin:8px 0"></div>
         <div class="form-row">
           <label>公开站点域名（手动选择，不自动绕过平台验证）</label>
           <select id="publicShopHost" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--line)">
@@ -43,13 +44,14 @@ html=html.replace(needle, """      <div class="card">
           <button class="btn btn-ghost" onclick="refreshPublicShops(8)" id="publicShopRefresh8">刷新下一批 8 家</button>
           <button class="btn btn-ghost" onclick="cancelPublicShops()" id="publicShopCancel" disabled>取消本次刷新</button>
           <button class="btn btn-ghost" onclick="savePublicAuto()">保存自动更新设置</button>
+          <button class="btn btn-ghost" onclick="skipPublicShop()">手动跳过当前店铺</button>
         </div>
         <div class="hint" style="margin-top:10px">性能优化：最多 2 路请求同时在途，全局每秒至多开始 1 个请求；一次性对比同店旧商品，跳过无变化的数据库写入。</div>
         <div id="publicShopProgress" class="test-result" style="line-height:1.8;white-space:pre-line"></div>
-        <p class="hint" style="line-height:1.8">接口若要求登录、验证码、返回 HTML 验证页面或限流，将提示并停止，不绕过验证。新店铺可通过粘贴链接添加，新商品可同步；未获取到的旧商品不会被误删。商品详情全文及新店铺发现需要单独接口。</p>
+        <p class="hint" style="line-height:1.8">公开商品源如返回 HTML/验证页，系统暂缓后台重试 12 小时，避免反复消耗流量。可手动选择其他公开域名后重试，或改用下方 SQLite/JSON 数据源；自动跳过验证不被支持。新店铺可通过粘贴链接添加，新商品可同步；未获取到的旧商品不会被误删。商品详情全文及新店铺发现需要单独接口。</p>
       </div>
 """ + needle,1)
-html=html.replace("v5.0.0","v8.0.2").replace("v6.0.0","v8.0.2").replace("v7.0.0","v8.0.2")
+html=html.replace("v5.0.0","v8.0.3").replace("v6.0.0","v8.0.3").replace("v7.0.0","v8.0.3").replace("v8.0.2","v8.0.3")
 script=r"""
 <script>
 function renderPublicInfo(){
@@ -62,9 +64,28 @@ function renderPublicInfo(){
       '下次轮到店铺序号：'+(Number(info.offset||0)+1)+
       '\n上次成功：'+date+
       '\n最近结果：'+(info.last_result||'无');
+    const cooldown=Number(info.hold_until_ms||0);
+    const status=$('#publicShopHealth');
+    const lastHttp=Number(info.last_http_status||0);
+    const lastWhen=info.last_checked_ms ? new Date(info.last_checked_ms).toLocaleString('zh-CN') : '未检测';
+    status.textContent='接口诊断：'+(info.last_host||info.host||'wzyp.cn')+
+      ' · HTTP '+(lastHttp||'未检测')+
+      ' · '+(info.last_content_type||'未知内容类型')+
+      '\n上次接口检测：'+lastWhen+
+      (cooldown>Date.now() ? '\n后台已暂停重试至 '+new Date(cooldown).toLocaleString('zh-CN')+
+        '（不影响手动检查及离线查询）':'');
+    status.style.color=info.last_error_kind ? '#b45309' : 'var(--sub)';
   }catch(e){
     $('#publicShopInfo').textContent='读取公开刷新状态失败：'+e.message;
   }
+}
+function skipPublicShop(){
+  if(!confirm('只跳过当前轮到的一个店铺，保留该店所有历史记录，确认？'))return;
+  const state=JSON.parse(window.WzypData.publicShopSkip());
+  const box=$('#publicShopProgress');
+  box.className='test-result '+(state._error?'bad':'ok');
+  box.textContent=state._error||('已跳过店铺 '+state.skipped+'，下次将继续检查下一家。');
+  renderPublicInfo();
 }
 function savePublicAuto(){
   const hostResult=JSON.parse(window.WzypData.publicShopSetHost($('#publicShopHost').value));
