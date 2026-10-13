@@ -50,7 +50,12 @@ public final class PublicRefreshJob extends JobService {
                 PublicStorefrontUpdater updater=
                     new PublicStorefrontUpdater(getApplicationContext(),store);
                 activeUpdater=updater;
-                if(!stopped)updater.refreshBatch(4,null);
+                if(!stopped && updater.backgroundCoolingDown()){
+                    android.util.Log.i("WzypPublicSync",
+                        "Public API unavailable in last 12h; background check deferred");
+                }else if(!stopped){
+                    updater.refreshBatch(4,null);
+                }
             }catch(Exception e){
                 android.util.Log.w("WzypPublicSync","Shop refresh deferred: "+
                     e.getClass().getSimpleName());

@@ -42,6 +42,9 @@ public final class PublicStorefrontUpdater {
     private static final Object PACE_LOCK=new Object();
     private static long nextStart=0;
     private static final String PREFS="wzyp_public_sync_v6";
+    // A platform-wide HTML/challenge response is not an invalid shop. Avoid a daily
+    // background retry storm and leave manual checks available to the user.
+    private static final long SOURCE_COOLDOWN_MS=12L*60L*60L*1000L;
     private final Context context;
     private final OfflineStore store;
     private volatile boolean cancelled=false;
@@ -89,7 +92,53 @@ public final class PublicStorefrontUpdater {
         put(result,"last_run",p.getLong("last_run",0));
         put(result,"last_success",p.getLong("last_success",0));
         put(result,"last_result",p.getString("last_result","尚未进行公开店铺刷新"));
+        put(result,"last_http_status",p.getInt("http_status",0));
+        put(result,"last_content_type",p.getString("content_type",""));
+        put(result,"last_host",p.getString("response_host",publicHost()));
+        put(result,"last_checked_ms",p.getLong("checked_ms",0));
+        put(result,"last_error_kind",p.getString("error_kind",""));
+        put(result,"hold_until_ms",p.getLong("hold_until_ms",0));
         return result;
+    }
+
+    public boolean backgroundCoolingDown() {
+        return prefs().getLong("hold_until_ms",0)>System.currentTimeMillis();
+    }
+
+    private void recordResponse(String host,int status,String contentType) {
+        prefs().edit().putInt("http_status",status)
+            .putString("content_type",contentType==null?"":contentType)
+            .putString("response_host",host)
+            .putLong("checked_ms",System.currentTimeMillis()).apply();
+    }
+
+    private Exception blockedResponse(String host,int status,String description) {
+        long now=System.currentTimeMillis();
+        prefs().edit().putString("error_kind","source_unavailable")
+            .putLong("hold_until_ms",now+SOURCE_COOLDOWN_MS)
+            .putString("last_result",description).putLong("last_run",now).commit();
+        return new Exception(description+
+            "。该源的每日后台更新已暂缓 12 小时；未更改原数据库。"+
+            "请检查站点接口是否开放，或改用 SQLite 导入/增量数据源。");
+    }
+
+    /** Explicitly skip ONE shop, never automatically skip a WAF/challenge page. */
+    public JSONObject skipCurrentShop() throws Exception {
+        SharedPreferences p=prefs();
+        int position=Math.max(0,p.getInt("offset",0));
+        JSONArray one=store.publicShopTokens(position,1);
+        if(one.length()==0) {
+            position=0;
+            one=store.publicShopTokens(0,1);
+        }
+        if(one.length()==0)throw new Exception("没有可跳过的店铺");
+        String skipped=one.getString(0);
+        if(!p.edit().putInt("offset",position+1)
+            .putString("last_result","已手动跳过店铺 "+skipped+"，未删除数据").commit())
+            throw new Exception("无法保存店铺跳过位置");
+        JSONObject out=info();
+        put(out,"skipped",skipped);
+        return out;
     }
 
     private static void waitPaced() throws InterruptedException {
@@ -131,12 +180,15 @@ public final class PublicStorefrontUpdater {
         try {
             try(OutputStream output=connection.getOutputStream()){output.write(data);}
             int status=connection.getResponseCode();
-            if(status==401||status==403||status==429)
-                throw new Exception("平台拒绝访问或要求验证（HTTP "+status+"），已停止刷新；不会尝试绕过验证");
-            if(status!=200)throw new Exception("平台接口 HTTP "+status);
             String contentType=connection.getContentType();
-            if(contentType!=null && contentType.toLowerCase().contains("text/html"))
-                throw new Exception("平台返回 HTML/验证页而非商品 JSON，已停止刷新");
+            recordResponse(host,status,contentType);
+            if(status==401||status==403||status==429)
+                throw blockedResponse(host,status,"公开接口拒绝请求（HTTP "+status+"），可能需要验证或限流");
+            if(status>=300 && status<400)
+                throw blockedResponse(host,status,"公开接口返回重定向（HTTP "+status+"），不是商品 JSON");
+            if(status!=200)throw new Exception("平台接口 HTTP "+status);
+            if(contentType!=null && contentType.toLowerCase(java.util.Locale.ROOT).contains("text/html"))
+                throw blockedResponse(host,status,"接口 "+host+" 返回 HTTP 200 HTML 网页，不是商品 JSON；可能是验证页、站点改版或接口不可用");
             if(connection.getContentLengthLong()>MAX_BODY)
                 throw new Exception("商品列表响应过大");
             ByteArrayOutputStream buf=new ByteArrayOutputStream();
@@ -147,7 +199,14 @@ public final class PublicStorefrontUpdater {
                     buf.write(bytes,0,count);
                 }
             }
-            JSONObject response=new JSONObject(new String(buf.toByteArray(),StandardCharsets.UTF_8));
+            String body=new String(buf.toByteArray(),StandardCharsets.UTF_8).trim();
+            if(body.startsWith("<!") || body.startsWith("<html") || body.startsWith("<HTML"))
+                throw blockedResponse(host,status,"接口 "+host+" 返回 HTML 内容，而非商品 JSON");
+            JSONObject response;
+            try{response=new JSONObject(body);}
+            catch(org.json.JSONException malformed) {
+                throw blockedResponse(host,status,"接口 "+host+" 返回无法解析的非 JSON 数据");
+            }
             if(response.optInt("code",-1)!=1)
                 throw new Exception("平台接口错误："+response.optString("msg","状态异常").substring(
                     0,Math.min(100,response.optString("msg","状态异常").length())));
@@ -278,6 +337,8 @@ public final class PublicStorefrontUpdater {
             for(JSONObject good:combined.values())snapshot.put(good);
             requireActive();
             JSONObject summary=store.mergePublicShop(token,snapshot);
+            prefs().edit().putString("error_kind","")
+                .putLong("hold_until_ms",0).apply();
             put(summary,"requests",calls);
             put(summary,"elapsed_ms",SystemClock.elapsedRealtime()-started);
             if(progress!=null)progress.update("shop_done",
