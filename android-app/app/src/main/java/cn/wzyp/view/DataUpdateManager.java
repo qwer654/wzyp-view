@@ -63,6 +63,27 @@ public final class DataUpdateManager {
     }
 
     @JavascriptInterface
+    public String syncHealth() {
+        JSONObject state=new JSONObject();
+        boolean networkAllowed=activity.checkSelfPermission(
+            android.Manifest.permission.ACCESS_NETWORK_STATE)==
+                android.content.pm.PackageManager.PERMISSION_GRANTED;
+        put(state,"network_permission",networkAllowed);
+        android.app.job.JobScheduler jobs=(android.app.job.JobScheduler)
+            activity.getSystemService(android.content.Context.JOB_SCHEDULER_SERVICE);
+        put(state,"public_scheduled",jobs!=null &&
+            jobs.getPendingJob(PublicRefreshJob.JOB_ID)!=null);
+        put(state,"delta_scheduled",jobs!=null &&
+            jobs.getPendingJob(DeltaSyncEngine.JOB_ID)!=null);
+        put(state,"public_requested",
+            activity.getSharedPreferences("wzyp_public_sync_v6",0)
+                .getBoolean("auto",false));
+        put(state,"delta_requested",
+            DeltaSyncEngine.preferences(activity).getBoolean("enabled",false));
+        return state.toString();
+    }
+
+    @JavascriptInterface
     public String publicShopStatus() {
         return storefront.info().toString();
     }
